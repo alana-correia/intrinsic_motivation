@@ -59,8 +59,9 @@ class Blocks(nn.Module):
         for i in range(self.nlayers):
             self.bc_lst[i].block_lstm.blockify_params()
 
-    def forward(self, inp, hx, cx):
+    def forward(self, inp, lstm_state):
         inp_use = inp
+        hx, cx = lstm_state
         #print(inp_use.shape)
         hx_new, cx_new, mask_new = [],[],[]
 
@@ -73,7 +74,8 @@ class Blocks(nn.Module):
 
             inp_use = hx_
 
-        return hx_new, cx_new
+        lstm_state = (hx_new, cx_new)
+        return lstm_state
 
 
 if __name__ == "__main__":

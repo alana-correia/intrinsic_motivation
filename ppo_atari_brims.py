@@ -25,7 +25,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default="brims_mlp_mlp_extrinsic_reward",
+    parser.add_argument("--exp-name", type=str, default="cnn_brims_mlp_mlp_extrinsic_reward",
         help="the name of this experiment")
     parser.add_argument("--gym-id", type=str, default="BreakoutNoFrameskip-v4",
         help="the id of the gym environment")
@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument("--load_model", type=bool, default=False)
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
 
@@ -57,7 +57,7 @@ def parse_args():
     parser.add_argument('--num_blocks', nargs='+', type=int, default=[4])
     parser.add_argument("--ninp", type=int, default=512, help="embedding input")
     parser.add_argument("--dropout", type=float, default=0.5, help="dropout")
-    parser.add_argument("--use_inactive", type=bool, default=False)
+    parser.add_argument("--use_inactive", type=bool, default=True)
     parser.add_argument("--blocked_grad", type=bool, default=False)
 
     # Algorithm specific arguments
@@ -113,7 +113,7 @@ def make_env(gym_id, seed, idx, capture_video, run_name):
         env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
-        env = gym.wrappers.FrameStack(env, 4)
+        env = gym.wrappers.FrameStack(env, 1)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -127,35 +127,6 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
-class Agent(nn.Module):
-    def __init__(self, envs):
-        super(Agent, self).__init__()
-        self.network = nn.Sequential(
-            layer_init(nn.Conv2d(4, 32, 8, stride=4)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
-            nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
-            nn.ReLU(),
-            nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
-            nn.ReLU(),
-        )
-        self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(512, 1), std=1)
-
-
-    def get_value(self, x):
-        return self.critic(self.network(x / 255.0))
-
-    def get_action_and_value(self, x, action=None):
-        hidden = self.network(x / 255.0)
-        logits = self.actor(hidden)
-        probs = Categorical(logits=logits)
-        if action is None:
-            action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
-
 
 class AgentBrims(nn.Module):
     def __init__(self, envs, ninp=512, nhid=[512], nlayers=1, dropout=0.5, num_blocks=[4], topk=[2], use_inactive=False, blocked_grad=False):
@@ -166,7 +137,7 @@ class AgentBrims(nn.Module):
         print('Top k Blocks: ', topk)
         self.drop = nn.Dropout(dropout)
         self.num_blocks = num_blocks
-        self.nhid = nhid
+        self.ninp = ninp
         self.sigmoid = nn.Sigmoid()
         self.sm = nn.Softmax(dim=1)
         self.use_inactive = use_inactive
@@ -174,19 +145,19 @@ class AgentBrims(nn.Module):
         self.nlayers = nlayers
         print("Dropout rate", dropout)
         self.encoder = nn.Sequential(
-            layer_init(nn.Conv2d(4, 32, 8, stride=4)),
+            layer_init(nn.Conv2d(1, 32, 8, stride=4)),
             nn.ReLU(),
             layer_init(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
             layer_init(nn.Conv2d(64, 64, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
+            layer_init(nn.Linear(64 * 7 * 7, ninp)),
             nn.ReLU(),
         )
         self.brims = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
-        self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(512, 1), std=1)
+        self.actor = layer_init(nn.Linear(self.nhid[-1], envs.single_action_space.n), std=0.01)
+        self.critic = layer_init(nn.Linear(self.nhid[-1], 1), std=1)
 
     def init_hidden(self, bsz):
         hx, cx = [],[]
@@ -194,25 +165,43 @@ class AgentBrims(nn.Module):
         for i in range(self.nlayers):
             hx.append(weight.new_zeros(bsz, self.nhid[i]))
             cx.append(weight.new_zeros(bsz, self.nhid[i]))
-
         return (hx,cx)
 
     def brims_blockify_params(self):
         self.brims.blockify_params()
 
-    def get_value(self, x, hx, cx):
-        emb = self.encoder(x / 255.0)
-        hx, cx = self.brims(emb, hx, cx)
-        return self.critic(hx[-1])
+    def get_states(self, x, lstm_state):
+        embs = self.encoder(x / 255.0)
+        batch_size = lstm_state[0][0].shape[0]
+        input_size = lstm_state[0][0].shape[1]
+        embs = embs.reshape((-1, batch_size, input_size))
+        new_hidden = []
+        self.brims_blockify_params()
+        #print(f'embs (fora do for): {embs.shape}')
+        for emb in embs:
+            #print(f'emb (dentro do for): {emb.shape}')
+            lstm_state = self.brims(emb, lstm_state)
+            #new_hidden += [lstm_state[0][-1]]
+            new_hidden.append(lstm_state[0][-1])
+        #print(f'saiu da chamada da lstm new hidden shape: {len(new_hidden)}')
+        #new_hidden = torch.flatten(torch.cat(new_hidden), 0, 1)
+        new_hidden = torch.stack(new_hidden)
+        new_hidden = new_hidden.view(embs.shape[0]*batch_size, self.nhid[-1])
+        #print(f'após a chamada da lstm new hidden shape: {new_hidden.shape}')
+        #exit()
+        return new_hidden, lstm_state
 
-    def get_action_and_value(self, x, hx, cx, action=None):
-        emb = self.encoder(x / 255.0)
-        hx, cx = self.brims(emb, hx, cx)
-        logits = self.actor(hx[-1])
+    def get_value(self, x, lstm_state):
+        hidden, lstm_state = self.get_states(x, lstm_state)
+        return self.critic(hidden)
+
+    def get_action_and_value(self, x, lstm_state, action=None):
+        hidden, lstm_state = self.get_states(x, lstm_state)
+        logits = self.actor(hidden)
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hx[-1]), hx, cx
+        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden), lstm_state
 
 
 def repackage_hidden(h):
@@ -234,6 +223,8 @@ def repackage_hidden(h):
 if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    print(args.batch_size)
+    print(args.minibatch_size)
 
     if args.track:
         import wandb
@@ -288,19 +279,22 @@ if __name__ == "__main__":
     start_time = time.time()
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
+
+
+    next_lstm_state = agent.init_hidden(args.num_envs)
+
     num_updates = args.total_timesteps // args.batch_size
 
     for update in range(1, num_updates + 1):
+        initial_lstm_state = (next_lstm_state[0], next_lstm_state[1])
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (update - 1.0) / num_updates
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
-        with torch.no_grad():
-            hidden = agent.init_hidden(args.num_envs)
-            hx, cx = hidden
-            agent.brims_blockify_params()
+
+            #agent.brims_blockify_params()
 
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -309,7 +303,8 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value, hx, cx = agent.get_action_and_value(next_obs, hx, cx)
+                #next_obs = next_obs.reshape(1, 8, 1, 84, 84)
+                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state)
                 #hidden = repackage_hidden(hidden)
                 values[step] = value.flatten()
             actions[step] = action
@@ -331,12 +326,11 @@ if __name__ == "__main__":
 
                     break
 
-        with torch.no_grad():
-            hidden = (hx, cx)
-            hidden = repackage_hidden(hidden)
         # bootstrap value if not done
         with torch.no_grad():
-            next_value = agent.get_value(next_obs, hx, cx).reshape(1, -1)
+
+            next_value = agent.get_value(next_obs, next_lstm_state).reshape(1, -1)
+
             if args.gae:
                 advantages = torch.zeros_like(rewards).to(device)
                 lastgaelam = 0
@@ -364,25 +358,39 @@ if __name__ == "__main__":
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
         mean_advantages = b_advantages.mean()
+
         # Optimizing the policy and value network
-        b_inds = np.arange(args.batch_size)
+        assert args.num_envs % args.num_minibatches == 0
+        envsperbatch = args.num_envs // args.num_minibatches
+        envinds = np.arange(args.num_envs)
+        flatinds = np.arange(args.batch_size).reshape(args.num_steps, args.num_envs)
+        #print(flatinds.shape)
         clipfracs = []
+        #print(f'COMEÇOU A TREINARRRRR')
         for epoch in range(args.update_epochs):
-            np.random.shuffle(b_inds)
-            hidden = agent.init_hidden(args.minibatch_size)
-            hx, cx = hidden
-            for start in range(0, args.batch_size, args.minibatch_size):
-                end = start + args.minibatch_size
-                mb_inds = b_inds[start:end]
+            np.random.shuffle(envinds)
+            for start in range(0, args.num_envs, envsperbatch):
+                end = start + envsperbatch
+                mbenvinds = envinds[start:end]
+                mb_inds = flatinds[:, mbenvinds].ravel()  # be really careful about the index
 
+                hx_mb = []
+                cx_mb = []
+                [hx_mb.append(initial_lstm_state[0][i][mbenvinds]) for i in range(args.nlayers)]
+                [cx_mb.append(initial_lstm_state[1][i][mbenvinds]) for i in range(args.nlayers)]
+                _, newlogprob, entropy, newvalue, _ = agent.get_action_and_value(
+                    b_obs[mb_inds],
+                    (hx_mb, cx_mb),
+                    b_actions.long()[mb_inds],
+                )
 
-                _, newlogprob, entropy, newvalue, hx, cx = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds], hx, cx)
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -419,6 +427,7 @@ if __name__ == "__main__":
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
+
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
@@ -445,6 +454,6 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-        torch.save(agent, f'weights/model_{run_name}.pt')
+
     envs.close()
     writer.close()
