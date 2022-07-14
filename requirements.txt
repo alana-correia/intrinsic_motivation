@@ -91,7 +91,7 @@ shellingham==1.4.0
 shortuuid==1.0.9
 six==1.16.0
 smmap==5.0.0
-stable-baselines3==1.5.1a9
+stable-baselines3==1.5.1a8
 tensorboard-data-server==0.6.0
 tensorboard-logger==0.1.0
 tensorboard-plugin-wit==1.8.1
