@@ -10,8 +10,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
-from torch.utils.tensorboard import SummaryWriter
 from brims.blocks import Blocks
+import wandb
+import json
 
 from stable_baselines3.common.atari_wrappers import (  # isort:skip
     ClipRewardEnv,
@@ -27,13 +28,17 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default="cnn_brims_mlp_mlp_extrinsic_reward",
         help="the name of this experiment")
+    parser.add_argument("--run_name", type=str, default=None,
+                        help="experiment name")
     parser.add_argument("--gym-id", type=str, default="BreakoutNoFrameskip-v4",
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--total-timesteps", type=int, default=2000000000,
+    parser.add_argument("--frame_stack", type=int, default=4,
+                        help="frame stack num")
+    parser.add_argument("--total-timesteps", type=int, default=210000000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
@@ -52,13 +57,13 @@ def parse_args():
 
     #Brims parameters
     parser.add_argument("--nlayers", type=int, default=1, help="number of layers")
-    parser.add_argument('--nhid', nargs='+', type=int, default=[512])
+    parser.add_argument('--nhid', nargs='+', type=int, default=[128])
     parser.add_argument('--topk', nargs='+', type=int, default=[2])
     parser.add_argument('--num_blocks', nargs='+', type=int, default=[4])
-    parser.add_argument("--ninp", type=int, default=512, help="embedding input")
+    parser.add_argument("--ninp", type=int, default=128, help="embedding input")
     parser.add_argument("--dropout", type=float, default=0.5, help="dropout")
     parser.add_argument("--use_inactive", type=bool, default=True)
-    parser.add_argument("--blocked_grad", type=bool, default=False)
+    parser.add_argument("--blocked_grad", type=bool, default=True)
 
     # Algorithm specific arguments
     parser.add_argument("--num-envs", type=int, default=8,
@@ -98,22 +103,23 @@ def parse_args():
     return args
 
 
-def make_env(gym_id, seed, idx, capture_video, run_name):
+def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, split='train'):
     def thunk():
         env = gym.make(gym_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
-                env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+                env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=4)
-        env = EpisodicLifeEnv(env)
+        if split == 'train':
+            env = EpisodicLifeEnv(env)
         if "FIRE" in env.unwrapped.get_action_meanings():
             env = FireResetEnv(env)
         env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
-        env = gym.wrappers.FrameStack(env, 1)
+        env = gym.wrappers.FrameStack(env, frame_stack)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -129,7 +135,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class AgentBrims(nn.Module):
-    def __init__(self, envs, ninp=512, nhid=[512], nlayers=1, dropout=0.5, num_blocks=[4], topk=[2], use_inactive=False, blocked_grad=False):
+    def __init__(self, framestack, ninp=512, nhid=[512], nlayers=1, dropout=0.5, num_blocks=[4], topk=[2], use_inactive=False, blocked_grad=False):
         super(AgentBrims, self).__init__()
 
         self.nhid = nhid
@@ -145,7 +151,7 @@ class AgentBrims(nn.Module):
         self.nlayers = nlayers
         print("Dropout rate", dropout)
         self.encoder = nn.Sequential(
-            layer_init(nn.Conv2d(1, 32, 8, stride=4)),
+            layer_init(nn.Conv2d(framestack, 32, 8, stride=4)),
             nn.ReLU(),
             layer_init(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
@@ -156,7 +162,7 @@ class AgentBrims(nn.Module):
             nn.ReLU(),
         )
         self.brims = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
-        self.actor = layer_init(nn.Linear(self.nhid[-1], envs.single_action_space.n), std=0.01)
+        self.actor = layer_init(nn.Linear(self.nhid[-1], 4), std=0.01)
         self.critic = layer_init(nn.Linear(self.nhid[-1], 1), std=1)
 
     def init_hidden(self, bsz):
@@ -182,6 +188,7 @@ class AgentBrims(nn.Module):
             #print(f'emb (dentro do for): {emb.shape}')
             lstm_state = self.brims(emb, lstm_state)
             #new_hidden += [lstm_state[0][-1]]
+
             new_hidden.append(lstm_state[0][-1])
         #print(f'saiu da chamada da lstm new hidden shape: {len(new_hidden)}')
         #new_hidden = torch.flatten(torch.cat(new_hidden), 0, 1)
@@ -204,45 +211,15 @@ class AgentBrims(nn.Module):
         return action, probs.log_prob(action), probs.entropy(), self.critic(hidden), lstm_state
 
 
-def repackage_hidden(h):
-    """Wraps hidden states in new Tensors, to detach them from their history."""
-    hidden = []
-    if args.nlayers==1:
-        if isinstance(h, torch.Tensor):
-            return h.detach()
-        else:
-            return tuple(repackage_hidden(v) for v in h)
-    for i in range(args.nlayers):
-        if isinstance(h[i], torch.Tensor):
-            hidden.append(h[i].detach())
-        else:
-            hidden.append(tuple((h[i][0].detach(), h[i][1].detach())))
-    return hidden
-
 
 if __name__ == "__main__":
     args = parse_args()
-    run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-    print(args.batch_size)
-    print(args.minibatch_size)
+    if args.run_name is None:
+        run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    else:
+        run_name = args.run_name
 
-    if args.track:
-        import wandb
-
-        wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            sync_tensorboard=True,
-            config=vars(args),
-            name=run_name,
-            monitor_gym=True,
-            save_code=True,
-        )
-    writer = SummaryWriter(f"runs/{run_name}")
-    writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
+    print(f'RUN NAME: {run_name}')
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -254,16 +231,46 @@ if __name__ == "__main__":
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.capture_video, run_name) for i in range(args.num_envs)]
+        [make_env(args.gym_id, args.seed + i, i, args.frame_stack, args.capture_video, run_name) for i in
+         range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    agent = AgentBrims(envs, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk, args.use_inactive, args.blocked_grad).to(device)
+    agent = AgentBrims(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
+                       args.use_inactive, args.blocked_grad).to(device)
+
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    if (args.load_model):
-        state = torch.load(f'weights/model_{run_name}.pt')
-        agent.load_state_dict(state['state_dict'])
+    checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
+    if not os.path.exists(checkpoint_path):
+        os.makedirs(checkpoint_path)
+
+    json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
+
+    run = wandb.init(project=args.wandb_project_name,
+                     entity=args.wandb_entity,
+                     config=vars(args),
+                     name=run_name,
+                     monitor_gym=True,
+                     save_code=True,
+                     id=run_name,
+                     resume=True)
+    if wandb.run.resumed:
+        print(f'loading model ... {run_name}')
+        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        agent.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        update_init = checkpoint['update']
+        global_step = checkpoint['global_step']
+        print(f'load model OK ... update_init {update_init} | global_step {global_step}')
+    else:
+        print(f'new model ... {run_name}')
+        update_init = 1
+        global_step = 0
+
+    total_params = sum(p.numel() for p in agent.parameters() if p.requires_grad)
+    print("Model Built with Total Number of Trainable Parameters: " + str(total_params))
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
@@ -275,7 +282,6 @@ if __name__ == "__main__":
     avg_returns = deque(maxlen=20)
 
     # TRY NOT TO MODIFY: start the game
-    global_step = 0
     start_time = time.time()
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
@@ -285,7 +291,7 @@ if __name__ == "__main__":
 
     num_updates = args.total_timesteps // args.batch_size
 
-    for update in range(1, num_updates + 1):
+    for update in range(update_init, num_updates + 1):
         initial_lstm_state = (next_lstm_state[0], next_lstm_state[1])
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -317,12 +323,17 @@ if __name__ == "__main__":
 
             for item in info:
                 if "episode" in item.keys():
-                    print(f"global_step={global_step}, episodic_return={item['episode']['r']}")
+                    print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
-                    writer.add_scalar("episode-charts/average_20_last_score_episodes", np.average(avg_returns),
-                                      global_step)
-                    writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
+                    wandb.log({
+                        "charts/average_20_last_score_episodes": np.average(avg_returns),
+                        "charts/episodic_return": item["episode"]["r"],
+                        "charts/episodic_length": item["episode"]["l"]
+                    }, step=global_step)
+                    #writer.add_scalar("episode-charts/average_20_last_score_episodes", np.average(avg_returns),
+                    #                  global_step)
+                    #writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
+                    #writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
 
                     break
 
@@ -441,19 +452,24 @@ if __name__ == "__main__":
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        writer.add_scalar("losses/batch_mean_advantages", mean_advantages.item(), global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-        writer.add_scalar("losses/explained_variance", explained_var, global_step)
+        wandb.log({
+            "charts/learning_rate": optimizer.param_groups[0]["lr"],
+            "losses/value_loss": v_loss.item(),
+            "losses/policy_loss": pg_loss.item(),
+            "losses/entropy": entropy_loss.item(),
+            "losses/old_approx_kl": old_approx_kl.item(),
+            "losses/approx_kl": approx_kl.item(),
+            "losses/clipfrac": np.mean(clipfracs),
+            "losses/explained_variance": explained_var,
+            "charts/SPS": int(global_step / (time.time() - start_time))
+        }, step=global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
-
+        torch.save({'update': update,
+                    'global_step': global_step,
+                    'epoch': epoch,
+                    'model_state_dict': agent.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
 
     envs.close()
-    writer.close()

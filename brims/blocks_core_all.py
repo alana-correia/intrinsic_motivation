@@ -175,6 +175,7 @@ class BlocksCore(nn.Module):
             cx_new = hx_new
         else:
             hx_new, cx_new = self.block_lstm(inp_use, hx, cx)
+            #print(f'Chamando a LSTM ... input da LSTM: {inp_use.shape} - hx da LSTM: {hx.shape} - cx da LSTM: {cx.shape} - output da LSTM: {hx_new.shape}')
 
         hx_new = hx_new.reshape((hx_new.shape[0], self.num_blocks_out, self.block_size_out))
         hx_new_grad_mask = blocked_grad.apply(hx_new, mask.reshape((mask.shape[0], self.num_blocks_out, self.block_size_out)))                #hx_new_grad_mask = hx_new * mask.reshape((mask.shape[0], self.num_blocks_out, self.block_size_out))
