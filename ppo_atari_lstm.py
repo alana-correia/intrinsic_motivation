@@ -215,7 +215,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    if args.device_num is not None:
+    if args.device_num >= 0:
         torch.cuda.set_device(args.device_num)
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
