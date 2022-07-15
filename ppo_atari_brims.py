@@ -56,7 +56,7 @@ def parse_args():
 
 
     #Brims parameters
-    parser.add_argument("--nlayers", type=int, default=1, help="number of layers")
+    parser.add_argument("--nlayers", type=int, default=2, help="number of layers")
     parser.add_argument('--nhid', nargs='+', type=int, default=[128])
     parser.add_argument('--topk', nargs='+', type=int, default=[2])
     parser.add_argument('--num_blocks', nargs='+', type=int, default=[4])
@@ -228,7 +228,9 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
-    torch.cuda.set_device(args.device_num)
+
+    if args.device_num is not None:
+        torch.cuda.set_device(args.device_num)
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
