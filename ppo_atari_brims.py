@@ -68,6 +68,8 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--num-envs", type=int, default=8,
         help="the number of parallel game environments")
+    parser.add_argument("--device_num", type=int, default=0,
+                        help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -226,6 +228,7 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
+    torch.cuda.set_device(args.device_num)
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
