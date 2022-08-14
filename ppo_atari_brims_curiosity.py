@@ -29,7 +29,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default="cnn_brims_mlp_mlp_hibrid_reward",
         help="the name of this experiment")
-    parser.add_argument("--run_name", type=str, default=None,
+    parser.add_argument("--run_name", type=str, default="BreakoutNoFrameskip-v4__cnn_brims_mlp_mlp_hibrid_reward__1__1658017900",
                         help="experiment name")
     parser.add_argument("--gym-id", type=str, default="BreakoutNoFrameskip-v4",
         help="the id of the gym environment")
@@ -256,6 +256,17 @@ class AgentCuriosity(nn.Module):
         return intrinsic_reward.detach(), lstm_state, new_hidden_f
 
 
+def function_with_args_and_default_kwargs(optional_args=None, **kwargs):
+    parser = argparse.ArgumentParser()
+    # add some arguments
+    # add the other arguments
+    for k, v in kwargs.items():
+        parser.add_argument('--' + k, default=v)
+    args = parser.parse_args(optional_args)
+    return args
+
+
+
 if __name__ == "__main__":
     args = parse_args()
     if args.run_name is None:
@@ -264,6 +275,21 @@ if __name__ == "__main__":
         run_name = args.run_name
 
     print(f'RUN NAME: {run_name}')
+
+    if run_name is not None:
+        checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
+        #checkpoint_path = '/home/brain/alana/checkpoints/intrinsic'
+        f = open(os.path.join(checkpoint_path, f"{run_name}_args.json"), "r")
+        args = json.loads(f.read())
+
+        args = function_with_args_and_default_kwargs(**args)
+        args.run_name = run_name
+    else:
+        checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
+        if not os.path.exists(checkpoint_path):
+            os.makedirs(checkpoint_path)
+
+        json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -293,11 +319,10 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
-    if not os.path.exists(checkpoint_path):
-        os.makedirs(checkpoint_path)
+    best_return = 0
+    best_return_block = 0
+    cont_episodes = 0
 
-    json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
 
     run = wandb.init(project=args.wandb_project_name,
                      entity=args.wandb_entity,
@@ -308,7 +333,7 @@ if __name__ == "__main__":
                      id=run_name,
                      resume=True)
 
-    if wandb.run.resumed:
+    if run_name is not None:
         print(f'loading model ... {run_name}')
         wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         checkpoint = torch.load(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
@@ -316,6 +341,8 @@ if __name__ == "__main__":
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         update_init = checkpoint['update']
         global_step = checkpoint['global_step']
+        # best_return = checkpoint['best_return']
+        # best_return_six = checkpoint['best_return_six']
         print(f'load model OK ... update_init {update_init} | global_step {global_step}')
     else:
         print(f'new model ... {run_name}')
@@ -411,6 +438,30 @@ if __name__ == "__main__":
                     #                  global_step)
                     #writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
                     #writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
+
+                    if best_return < item["episode"]["r"]:
+                        best_return = item["episode"]["r"]
+                        torch.save({'update': update,
+                                    'global_step': global_step,
+                                    'best_return': item["episode"]["r"],
+                                    'model_state_dict': agent.state_dict(),
+                                    'optimizer_state_dict': optimizer.state_dict(),
+                                    'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_best_model.pth"))
+                        wandb.save(os.path.join(checkpoint_path, f"{run_name}_best_model.pth"))
+
+                    if best_return_block <= item["episode"]["r"]:
+                        best_return_block = item["episode"]["r"]
+                        cont_episodes += 1
+                        if cont_episodes == 4:
+                            cont_episodes = 0
+                            torch.save({'update': update,
+                                        'global_step': global_step,
+                                        'best_return_block': item["episode"]["r"],
+                                        'model_state_dict': agent.state_dict(),
+                                        'optimizer_state_dict': optimizer.state_dict(),
+                                        'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_best_model_block.pth"))
+                            wandb.save(os.path.join(checkpoint_path, f"{run_name}_best_model_block.pth"))
+
 
                     break
 
