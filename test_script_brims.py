@@ -46,24 +46,20 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
         )
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_best_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         agent.eval()
         done = False
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
-        next_lstm_state = (
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-        )
+        next_lstm_state = agent.init_hidden(1)
 
         r = 0
         k = 0
         while not done:
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state,
-                                                                                        next_done)
+                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state)
                 next_obs, reward, done, info = envs.step(action.cpu().numpy())
                 done = done[-1]
                 r += reward[-1]
@@ -138,25 +134,22 @@ def test_II(args, agent, run_name, path_load, path_save, test_name, num_games, n
         )
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_best_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         agent.eval()
         done = False
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
-        next_lstm_state = (
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-        )
+        next_lstm_state = agent.init_hidden(1)
 
         r = 0
         k = 0
         while not done:
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state,
-                                                                                        next_done)
+                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state)
                 next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                #next_obs, reward, done, info = envs.step(int(action.cpu().numpy()))
                 next_obs = 255 - next_obs
                 done = done[-1]
                 r += reward[-1]
@@ -231,25 +224,22 @@ def test_III(args, agent, run_name, path_load, path_save, test_name, mode, num_g
         )
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_best_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         agent.eval()
         done = False
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
-        next_lstm_state = (
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-        )
+        next_lstm_state = agent.init_hidden(1)
 
         r = 0
         k = 0
         while not done:
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state,
-                                                                                        next_done)
+                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state)
                 next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                #next_obs, reward, done, info = envs.step(int(action.cpu().numpy()))
                 done = done[-1]
                 r += reward[-1]
                 print('\rgame {} - reward (sum) {} - done {} - action {}'.format(idx, r, done, action.cpu().numpy()), end='')
@@ -323,25 +313,22 @@ def test_IV(args, agent, run_name, path_load, path_save, test_name, mode, diffic
         )
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_best_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         agent.eval()
         done = False
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
-        next_lstm_state = (
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-        )
+        next_lstm_state = agent.init_hidden(1)
 
         r = 0
         k = 0
         while not done:
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state,
-                                                                                        next_done)
+                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state)
                 next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                #next_obs, reward, done, info = envs.step(int(action.cpu().numpy()))
                 done = done[-1]
                 r += reward[-1]
                 print('\rgame {} - reward (sum) {} - done {} - action {}'.format(idx, r, done, action.cpu().numpy()), end='')
@@ -415,25 +402,22 @@ def test_V(args, agent, run_name, path_load, path_save, test_name, skip_frames, 
         )
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_best_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         agent.eval()
         done = False
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
-        next_lstm_state = (
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-        )
+        next_lstm_state = agent.init_hidden(1)
 
         r = 0
         k = 0
         while not done:
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state,
-                                                                                        next_done)
+                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state)
                 next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                #next_obs, reward, done, info = envs.step(int(action.cpu().numpy()))
                 done = done[-1]
                 r += reward[-1]
                 print('\rgame {} - reward (sum) {} - done {} - action {}'.format(idx, r, done, action.cpu().numpy()), end='')
@@ -507,26 +491,22 @@ def test_VI(args, agent, run_name, path_load, path_save, test_name, wd, num_game
         )
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_best_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         agent.eval()
         done = False
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
-        next_lstm_state = (
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-            torch.zeros(agent.lstm.num_layers, 1, agent.lstm.hidden_size).to(device),
-        )
+        next_lstm_state = agent.init_hidden(1)
 
         r = 0
         k = 0
         while not done:
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state,
-                                                                                        next_done)
+                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state)
                 next_obs, reward, done, info = envs.step(action.cpu().numpy())
-
+                #next_obs, reward, done, info = envs.step(int(action.cpu().numpy()))
                 cx = random.randint(wd + 1, 84 - wd)
                 cy = random.randint(wd + 1, 84 - wd)
                 next_obs[:, :, cx:cx + wd, cy:cy + wd] = 255
@@ -601,10 +581,10 @@ def function_with_args_and_default_kwargs(optional_args=None, **kwargs):
 
 def main():
     #args = parse_args()
-    run_name = "BreakoutNoFrameskip-v4__cnn_lstm_mlp_mlp_extrinsic_reward__1__1657760036"
-    checkpoint_path = os.path.join("/home/brain/alana/checkpoints", "BreakoutNoFrameskip-v4__cnn_lstm_mlp_mlp_extrinsic_reward__1__1657760036_args.json")
+    run_name = "BreakoutNoFrameskip-v4__cnn_brims_mlp_mlp_extrinsic_reward__1__1657909271"
+    checkpoint_path = os.path.join("/home/brain/alana/checkpoints/modelos", "BreakoutNoFrameskip-v4__cnn_brims_mlp_mlp_extrinsic_reward__1__1657909271_args.json")
     print(checkpoint_path)
-    path_load = "/home/brain/alana/checkpoints"
+    path_load = "/home/brain/alana/checkpoints/modelos"
     path_save = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}'
 
     if not os.path.exists(path_save):
@@ -627,15 +607,9 @@ def main():
     torch.backends.cudnn.deterministic = args.torch_deterministic
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    if("brims" in run_name and "extrinsic" in run_name):
-        agent = AgentBrims(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
-                   args.use_inactive, args.blocked_grad).to(device)
-    elif("brims" in run_name and "hibrid" in run_name):
-        agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
-                               args.topk,
-                               args.use_inactive, args.blocked_grad).to(device)
-    else:
-        agent = AgentLstmBaseline(args.frame_stack, args.emb_size, args.lstm_output).to(device)
+    agent = AgentBrims(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
+               args.use_inactive, args.blocked_grad).to(device)
+
     # cenário de teste I - mesmo ambiente de treinamento do agente
     stats_I = test_I(args, agent, run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, device)
     # cenário de teste II - ambiente de teste do agente com estilo diferente
