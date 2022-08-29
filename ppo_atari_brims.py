@@ -105,15 +105,16 @@ def parse_args():
     return args
 
 
-def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, split='train'):
+def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, difficulty=0, skip=4, split='train'):
     def thunk():
-        env = gym.make(gym_id)
+        env = gym.make(gym_id, mode=mode, difficulty=difficulty)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
+
         env = NoopResetEnv(env, noop_max=30)
-        env = MaxAndSkipEnv(env, skip=4)
+        env = MaxAndSkipEnv(env, skip=skip)
         if split == 'train':
             env = EpisodicLifeEnv(env)
         if "FIRE" in env.unwrapped.get_action_meanings():
@@ -128,7 +129,6 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, split='tra
         return env
 
     return thunk
-
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
