@@ -10,8 +10,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
+from brims.blocks import Blocks
 import wandb
 import json
+import torch.nn.functional as F
 
 from stable_baselines3.common.atari_wrappers import (  # isort:skip
     ClipRewardEnv,
@@ -25,7 +27,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default="cnn_lstm_mlp_mlp_extrinsic_reward",
+    parser.add_argument("--exp-name", type=str, default="cnn_brims_mlp_mlp_hibrid_reward",
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
@@ -37,6 +39,13 @@ def parse_args():
         help="seed of the experiment")
     parser.add_argument("--frame_stack", type=int, default=4,
                         help="frame stack num")
+
+    parser.add_argument("--im_weight", type=float, default=0.8,
+                        help="intrinsic motivation reward weight")
+
+    parser.add_argument("--em_weight", type=float, default=0.2,
+                        help="extrinsic motivation reward weight")
+
     parser.add_argument("--total-timesteps", type=int, default=210000000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -47,20 +56,25 @@ def parse_args():
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="Breakout-experiment_I",
         help="the wandb's project name")
+    parser.add_argument("--load_model", type=bool, default=False)
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
         help="weather to capture videos of the agent performances (check out `videos` folder)")
 
-    #model specific arguments
-    parser.add_argument("--emb_size", type=int, default=512,
-                        help="embedding size")
 
-    parser.add_argument("--lstm_output", type=int, default=128,
-                        help="embedding size")
+    #Brims parameters
+    parser.add_argument("--nlayers", type=int, default=1, help="number of layers")
+    parser.add_argument('--nhid', nargs='+', type=int, default=[128])
+    parser.add_argument('--topk', nargs='+', type=int, default=[2])
+    parser.add_argument('--num_blocks', nargs='+', type=int, default=[4])
+    parser.add_argument("--ninp", type=int, default=128, help="embedding input")
+    parser.add_argument("--dropout", type=float, default=0.5, help="dropout")
+    parser.add_argument("--use_inactive", type=bool, default=True)
+    parser.add_argument("--blocked_grad", type=bool, default=True)
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=8,
+    parser.add_argument("--num-envs", type=int, default=32,
         help="the number of parallel game environments")
     parser.add_argument("--device_num", type=int, default=0,
                         help="the number of parallel game environments")
@@ -106,13 +120,14 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
+        #if split == 'train':
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
-        if split == 'train':
-            env = EpisodicLifeEnv(env)
-        if "FIRE" in env.unwrapped.get_action_meanings():
-            env = FireResetEnv(env)
-        env = ClipRewardEnv(env)
+        #if split == 'train':
+        #env = EpisodicLifeEnv(env)
+        #if "FIRE" in env.unwrapped.get_action_meanings():
+        #env = FireResetEnv(env)
+        #env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, frame_stack)
@@ -129,74 +144,127 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.constant_(layer.bias, bias_const)
     return layer
 
+class AgentCuriosity(nn.Module):
+    def __init__(self, framestack, ninp=512, nhid=[512], nlayers=1, dropout=0.5, num_blocks=[4], topk=[2], use_inactive=False, blocked_grad=False):
+        super(AgentCuriosity, self).__init__()
 
-class Agent(nn.Module):
-    def __init__(self, frame_stack, emb_size, lstm_output):
-        super(Agent, self).__init__()
-        self.network = nn.Sequential(
-            layer_init(nn.Conv2d(frame_stack, 32, 8, stride=4)),
+        self.nhid = nhid
+        self.topk = topk
+        print('Top k Blocks: ', topk)
+        self.drop = nn.Dropout(dropout)
+        self.num_blocks = num_blocks
+        self.ninp = ninp
+        self.sigmoid = nn.Sigmoid()
+        self.sm = nn.Softmax(dim=1)
+        self.use_inactive = use_inactive
+        self.blocked_grad = blocked_grad
+        self.nlayers = nlayers
+        print("Dropout rate", dropout)
+        self.encoder = nn.Sequential(
+            layer_init(nn.Conv2d(framestack, 32, 8, stride=4)),
             nn.ReLU(),
             layer_init(nn.Conv2d(32, 64, 4, stride=2)),
             nn.ReLU(),
             layer_init(nn.Conv2d(64, 64, 3, stride=1)),
             nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, emb_size)),
+            layer_init(nn.Linear(64 * 7 * 7, ninp)),
             nn.ReLU(),
         )
-        self.lstm = nn.LSTM(emb_size, lstm_output)
-        for name, param in self.lstm.named_parameters():
-            if "bias" in name:
-                nn.init.constant_(param, 0)
-            elif "weight" in name:
-                nn.init.orthogonal_(param, 1.0)
-        self.actor = layer_init(nn.Linear(lstm_output, 4), std=0.01)
-        self.critic = layer_init(nn.Linear(lstm_output, 1), std=1)
 
+        self.brims_p = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
+        self.brims_f = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
+        self.actor = layer_init(nn.Linear(self.nhid[-1], 4), std=0.01)
+        self.critic = layer_init(nn.Linear(self.nhid[-1], 1), std=1)
 
+    def init_hidden_p(self, bsz):
+        hx, cx = [],[]
+        weight = next(self.brims_p.bc_lst[0].block_lstm.parameters())
+        for i in range(self.nlayers):
+            hx.append(weight.new_zeros(bsz, self.nhid[i]))
+            cx.append(weight.new_zeros(bsz, self.nhid[i]))
+        return (hx,cx)
 
-    def get_states(self, x, lstm_state, done):
+    def init_hidden_f(self, bsz):
+        hx, cx = [],[]
+        weight = next(self.brims_f.bc_lst[0].block_lstm.parameters())
+        for i in range(self.nlayers):
+            hx.append(weight.new_zeros(bsz, self.nhid[i]))
+            cx.append(weight.new_zeros(bsz, self.nhid[i]))
+        return (hx,cx)
 
-        hidden = self.network(x / 255.0)
-        #print(f'emb: {hidden.shape}')
-        # LSTM logic
-        batch_size = lstm_state[0].shape[1]
-        hidden = hidden.reshape((-1, batch_size, self.lstm.input_size))
-        done = done.reshape((-1, batch_size))
+    def brims_p_blockify_params(self):
+        self.brims_p.blockify_params()
+
+    def brims_f_blockify_params(self):
+        self.brims_f.blockify_params()
+
+    def get_states(self, x, lstm_state):
+        embs = self.encoder(x / 255.0)
+        batch_size = lstm_state[0][0].shape[0]
+        input_size = lstm_state[0][0].shape[1]
+        embs = embs.reshape((-1, batch_size, input_size))
         new_hidden = []
-        #print(f'hidden: {hidden.shape}')
-        #print(f'done: {done.shape}')
+        self.brims_p_blockify_params()
+        #print(f'embs (fora do for): {embs.shape}')
+        for emb in embs:
+            #print(f'emb (dentro do for): {emb.shape}')
+            lstm_state = self.brims_p(emb, lstm_state)
+            #new_hidden += [lstm_state[0][-1]]
 
-        for h, d in zip(hidden, done):
-            #print('chamada da lstm')
-            #print(f'h shape: {h.shape}')
-            h, lstm_state = self.lstm(
-                h.unsqueeze(0),
-                (
-                    (1.0 - d).view(1, -1, 1) * lstm_state[0],
-                    (1.0 - d).view(1, -1, 1) * lstm_state[1],
-                ),
-            )
-            #print(f'h: {h.shape}')
-            new_hidden += [h]
-
+            new_hidden.append(lstm_state[0][-1])
         #print(f'saiu da chamada da lstm new hidden shape: {len(new_hidden)}')
-        new_hidden = torch.flatten(torch.cat(new_hidden), 0, 1)
+        #new_hidden = torch.flatten(torch.cat(new_hidden), 0, 1)
+        new_hidden = torch.stack(new_hidden)
+        new_hidden = new_hidden.view(embs.shape[0]*batch_size, self.nhid[-1])
         #print(f'após a chamada da lstm new hidden shape: {new_hidden.shape}')
+        #exit()
+        return embs, new_hidden, lstm_state
 
-        return new_hidden, lstm_state
-
-    def get_value(self, x, lstm_state, done):
-        hidden, _ = self.get_states(x, lstm_state, done)
+    def get_value(self, x, lstm_state):
+        _, hidden, lstm_state = self.get_states(x, lstm_state)
         return self.critic(hidden)
 
-    def get_action_and_value(self, x, lstm_state, done, action=None):
-        hidden, lstm_state = self.get_states(x, lstm_state, done)
+    def get_action_and_value(self, x, lstm_state, action=None):
+        embs, hidden, lstm_state = self.get_states(x, lstm_state)
         logits = self.actor(hidden)
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden), lstm_state
+        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden), lstm_state, embs, hidden
+
+    def compute_intrinsic_reward(self, enc_ts, actual_brims_p, exp_hidden_f, lstm_state):
+        batch_size = lstm_state[0][0].shape[0]
+        input_size = lstm_state[0][0].shape[1]
+        enc_ts = enc_ts.reshape((-1, batch_size, input_size))
+        new_hidden_f = []
+        self.brims_f_blockify_params()
+        # print(f'embs (fora do for): {embs.shape}')
+        for enc_t in enc_ts:
+            # print(f'emb (dentro do for): {emb.shape}')
+            lstm_state = self.brims_f(enc_t, lstm_state)
+            # new_hidden += [lstm_state[0][-1]]
+
+            new_hidden_f.append(lstm_state[0][-1])
+        # print(f'saiu da chamada da lstm new hidden shape: {len(new_hidden)}')
+        # new_hidden = torch.flatten(torch.cat(new_hidden), 0, 1)
+        new_hidden_f = torch.stack(new_hidden_f)
+        new_hidden_f = new_hidden_f.view(enc_ts.shape[0] * batch_size, self.nhid[-1])
+        # print(f'após a chamada da lstm new hidden shape: {new_hidden.shape}')
+        # exit()
+        intrinsic_reward = F.mse_loss(actual_brims_p, exp_hidden_f, reduction='none').mean(-1)
+        return intrinsic_reward.detach(), lstm_state, new_hidden_f
+
+
+
+def function_with_args_and_default_kwargs(optional_args=None, **kwargs):
+    parser = argparse.ArgumentParser()
+    # add some arguments
+    # add the other arguments
+    for k, v in kwargs.items():
+        parser.add_argument('--' + k, default=v)
+    args = parser.parse_args(optional_args)
+    return args
 
 
 if __name__ == "__main__":
@@ -219,6 +287,8 @@ if __name__ == "__main__":
 
     print(f'RUN NAME: {run_name}')
 
+
+
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -230,42 +300,54 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
+    # Additional Info when using cuda
     if device.type == 'cuda':
         print(f'GPU: {torch.cuda.get_device_name(0)}')
     else:
         print("CUDA is not used")
-
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.frame_stack, args.capture_video, run_name) for i in range(args.num_envs)]
+        [make_env(args.gym_id, args.seed + i, i, args.frame_stack, args.capture_video, run_name) for i in
+         range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    agent = Agent(args.frame_stack, args.emb_size, args.lstm_output).to(device)
+    agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
+                       args.use_inactive, args.blocked_grad).to(device)
+
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+
+    best_return = 0
+    best_return_block = 0
+    cont_episodes = 0
 
     ''' 
     run = wandb.init(project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            config=vars(args),
-            name=run_name,
-            monitor_gym=True,
-            save_code=True,
-            id = run_name,
-            resume=True)'''
+                     entity=args.wandb_entity,
+                     config=vars(args),
+                     name=run_name,
+                     monitor_gym=True,
+                     save_code=True,
+                     id=run_name,
+                     resume=True)'''
+
     if args.run_name is not None:
         print(f'loading model ... {run_name}')
-        #wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         checkpoint = torch.load(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         update_init = checkpoint['update']
         global_step = checkpoint['global_step']
+        # best_return = checkpoint['best_return']
+        # best_return_six = checkpoint['best_return_six']
         print(f'load model OK ... update_init {update_init} | global_step {global_step}')
     else:
         print(f'new model ... {run_name}')
         update_init = 1
         global_step = 0
+
+
 
     total_params = sum(p.numel() for p in agent.parameters() if p.requires_grad)
     print("Model Built with Total Number of Trainable Parameters: " + str(total_params))
@@ -278,26 +360,31 @@ if __name__ == "__main__":
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
     avg_returns = deque(maxlen=20)
-    # TRY NOT TO MODIFY: start the game
 
+    # TRY NOT TO MODIFY: start the game
     start_time = time.time()
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
-    #print(f'num_layers: {agent.lstm.num_layers}')
-    #exit()
-    next_lstm_state = (
-        torch.zeros(agent.lstm.num_layers, args.num_envs, agent.lstm.hidden_size).to(device),
-        torch.zeros(agent.lstm.num_layers, args.num_envs, agent.lstm.hidden_size).to(device),
-    )  # hidden and cell states (see https://youtu.be/8HyCNIVRbSU)
+
+
+    next_lstm_state_p = agent.init_hidden_p(args.num_envs)
+    next_lstm_state_f = agent.init_hidden_f(args.num_envs)
+
+    exp_hidden = torch.zeros((args.num_envs, args.num_steps)).to(device)
+
     num_updates = args.total_timesteps // args.batch_size
 
     for update in range(update_init, num_updates + 1):
-        initial_lstm_state = (next_lstm_state[0].clone(), next_lstm_state[1].clone())
+        initial_lstm_state_p = (next_lstm_state_p[0], next_lstm_state_p[1])
+        initial_lstm_state_f = (next_lstm_state_f[0], next_lstm_state_f[1])
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (update - 1.0) / num_updates
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
+
+
+            #agent.brims_blockify_params()
 
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
@@ -306,38 +393,82 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value, next_lstm_state = agent.get_action_and_value(next_obs, next_lstm_state, next_done)
+                #next_obs = next_obs.reshape(1, 8, 1, 84, 84)
+                action, logprob, _, value, next_lstm_state_p, embs_t, actual_hidden = agent.get_action_and_value(next_obs, next_lstm_state_p)
+                #hidden = repackage_hidden(hidden)
+
+                im_reward, next_lstm_state_f, exp_hidden = agent.compute_intrinsic_reward(embs_t, actual_hidden, exp_hidden, next_lstm_state_f)
+
+
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
 
-            # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, done, info = envs.step(action.cpu().numpy())
-            rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
 
-            for item in info:
+            # TRY NOT TO MODIFY: execute the game and log data.
+            next_obs, ex_reward, done, info = envs.step(action.cpu().numpy())
+            ex_reward = torch.tensor(ex_reward).to(device).view(-1)
+            total_reward = im_reward
+            #print(f'reward externa: {ex_reward} shape: {ex_reward.shape}')
+            #print(f'reward interna: {im_reward} shape: {im_reward.shape}')
+            rewards[step] = total_reward
+            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+            #exit()
+
+            #print(type(info))
+            #print(len(info))
+            #exit()
+            for id, item in enumerate(info):
                 if "episode" in item.keys():
                     print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
-                    #wandb.log({
-                    #    "charts/average_20_last_score_episodes": np.average(avg_returns),
-                    #    "charts/episodic_return": item["episode"]["r"],
-                    #    "charts/episodic_length": item["episode"]["l"]
-                    #}, step=global_step)
-                    #writer.add_scalar("charts/average_20_last_score_episodes", np.average(avg_returns),
+                    '''
+                    wandb.log({
+                        "charts/average_20_last_score_episodes": np.average(avg_returns),
+                        "charts/episodic_return": item["episode"]["r"],
+                        "charts/intrinsic_reward (sem peso)": im_reward[id].item(),
+                        "charts/extrinsic_reward (sem peso)": ex_reward[id].item(),
+                        "charts/intrinsic_reward (com peso)": args.im_weight*im_reward[id].item(),
+                        "charts/extrinsic_reward (com peso)": args.em_weight*ex_reward[id].item(),
+                        "charts/total_reward (peso_e*re + peso_i*ri)": total_reward[id].item(),
+                        "charts/episodic_length": item["episode"]["l"]
+                    }, step=global_step)'''
+
+                    #writer.add_scalar("episode-charts/average_20_last_score_episodes", np.average(avg_returns),
                     #                  global_step)
                     #writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
                     #writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
+
+                    if best_return < item["episode"]["r"]:
+                        best_return = item["episode"]["r"]
+                        torch.save({'update': update,
+                                    'global_step': global_step,
+                                    'best_return': item["episode"]["r"],
+                                    'model_state_dict': agent.state_dict(),
+                                    'optimizer_state_dict': optimizer.state_dict(),
+                                    'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_best_model.pth"))
+                        #wandb.save(os.path.join(checkpoint_path, f"{run_name}_best_model.pth"))
+
+                    if best_return_block <= item["episode"]["r"]:
+                        best_return_block = item["episode"]["r"]
+                        cont_episodes += 1
+                        if cont_episodes == 4:
+                            cont_episodes = 0
+                            torch.save({'update': update,
+                                        'global_step': global_step,
+                                        'best_return_block': item["episode"]["r"],
+                                        'model_state_dict': agent.state_dict(),
+                                        'optimizer_state_dict': optimizer.state_dict(),
+                                        'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_best_model_block.pth"))
+                            #wandb.save(os.path.join(checkpoint_path, f"{run_name}_best_model_block.pth"))
+
+
                     break
 
         # bootstrap value if not done
         with torch.no_grad():
-            next_value = agent.get_value(
-                next_obs,
-                next_lstm_state,
-                next_done,
-            ).reshape(1, -1)
+
+            next_value = agent.get_value(next_obs, next_lstm_state_p).reshape(1, -1)
 
             if args.gae:
                 advantages = torch.zeros_like(rewards).to(device)
@@ -366,12 +497,13 @@ if __name__ == "__main__":
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
-        b_dones = dones.reshape(-1)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
+        mean_advantages = b_advantages.mean()
 
         # Optimizing the policy and value network
         assert args.num_envs % args.num_minibatches == 0
@@ -380,33 +512,40 @@ if __name__ == "__main__":
         flatinds = np.arange(args.batch_size).reshape(args.num_steps, args.num_envs)
         #print(flatinds.shape)
         clipfracs = []
+
+        intrinsic_mse = nn.MSELoss()
+        #print(f'COMEÇOU A TREINARRRRR')
         for epoch in range(args.update_epochs):
             np.random.shuffle(envinds)
             for start in range(0, args.num_envs, envsperbatch):
                 end = start + envsperbatch
                 mbenvinds = envinds[start:end]
-                #print(mbenvinds)
                 mb_inds = flatinds[:, mbenvinds].ravel()  # be really careful about the index
-                #print(mb_inds)
-                #print(f'mb_inds: {mb_inds} shape: {mb_inds.shape}')
-                #print(f'b_obs: {b_obs[mb_inds].shape}')
-                #exit()
-                #print(f'initial state [0] tuple: {initial_lstm_state[0].shape} --- initial state [0] tuple com escolhas: {initial_lstm_state[0][:, mbenvinds].shape}')
 
-                _, newlogprob, entropy, newvalue, _ = agent.get_action_and_value(
+                hx_mb_p = []
+                cx_mb_p = []
+                [hx_mb_p.append(initial_lstm_state_p[0][i][mbenvinds]) for i in range(args.nlayers)]
+                [cx_mb_p.append(initial_lstm_state_p[1][i][mbenvinds]) for i in range(args.nlayers)]
+
+                _, newlogprob, entropy, newvalue, _ , embs, h_current = agent.get_action_and_value(
                     b_obs[mb_inds],
-                    (initial_lstm_state[0][:, mbenvinds], initial_lstm_state[1][:, mbenvinds]),
-                    b_dones[mb_inds],
+                    (hx_mb_p, cx_mb_p),
                     b_actions.long()[mb_inds],
                 )
 
-                #print(f'newlogprob: {newlogprob.shape}')
-                #print(f'entropy: {entropy.shape}')
-                #print(f'newvalue: {newvalue.shape}')
+                hx_mb_f = []
+                cx_mb_f = []
+                [hx_mb_f.append(initial_lstm_state_f[0][i][mbenvinds]) for i in range(args.nlayers)]
+                [cx_mb_f.append(initial_lstm_state_f[1][i][mbenvinds]) for i in range(args.nlayers)]
+
+                _, _ , exp_hidden = agent.compute_intrinsic_reward(embs_t, actual_hidden, exp_hidden, (hx_mb_f, cx_mb_f))
+
+
 
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
+                loss_intrinsic = intrinsic_mse(actual_hidden.detach(), exp_hidden.detach())
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
@@ -438,7 +577,8 @@ if __name__ == "__main__":
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
 
                 entropy_loss = entropy.mean()
-                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+                loss = (pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef) + loss_intrinsic
+
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -452,6 +592,7 @@ if __name__ == "__main__":
         y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+
         ''' 
         wandb.log({
             "charts/learning_rate": optimizer.param_groups[0]["lr"],
@@ -462,8 +603,11 @@ if __name__ == "__main__":
             "losses/approx_kl": approx_kl.item(),
             "losses/clipfrac": np.mean(clipfracs),
             "losses/explained_variance": explained_var,
+            "losses/intrinsic_loss": loss_intrinsic.item(),
             "charts/SPS": int(global_step / (time.time() - start_time))
         }, step=global_step)'''
+
+
         print("SPS:", int(global_step / (time.time() - start_time)))
         torch.save({'update': update,
                     'global_step': global_step,
@@ -473,8 +617,4 @@ if __name__ == "__main__":
                     'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         #wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
 
-
-
     envs.close()
-    #writer.close()
-    #run.finish()
