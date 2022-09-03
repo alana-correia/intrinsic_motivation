@@ -60,7 +60,7 @@ def parse_args():
                         help="embedding size")
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=128,
+    parser.add_argument("--num-envs", type=int, default=64,
         help="the number of parallel game environments")
     parser.add_argument("--device_num", type=int, default=0,
                         help="the number of parallel game environments")
@@ -74,7 +74,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches", type=int, default=64,
+    parser.add_argument("--num-minibatches", type=int, default=32,
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
