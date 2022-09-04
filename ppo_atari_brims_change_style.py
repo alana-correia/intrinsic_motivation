@@ -281,8 +281,6 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    if args.device_num >= 0:
-        torch.cuda.set_device(args.device_num)
 
     if device.type == 'cuda':
         print(f'GPU: {torch.cuda.get_device_name(0)}')
