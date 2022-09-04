@@ -248,7 +248,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
         print(f'loading model ... {args.run_name}')
-        # wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         checkpoint = torch.load(os.path.join(checkpoint_path, f"{args.run_name}_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

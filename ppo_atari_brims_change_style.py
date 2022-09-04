@@ -13,6 +13,7 @@ from torch.distributions.categorical import Categorical
 from brims.blocks import Blocks
 import wandb
 import json
+import matplotlib.pyplot as plt
 
 from stable_baselines3.common.atari_wrappers import (  # isort:skip
     ClipRewardEnv,
@@ -26,7 +27,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default="cnn_brims_mlp_mlp_extrinsic_reward",
+    parser.add_argument("--exp-name", type=str, default="brims_extrinsic_change_style",
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
@@ -56,7 +57,7 @@ def parse_args():
 
 
     #Brims parameters
-    parser.add_argument("--nlayers", type=int, default=2, help="number of layers")
+    parser.add_argument("--nlayers", type=int, default=1, help="number of layers")
     parser.add_argument('--nhid', nargs='+', type=int, default=[128])
     parser.add_argument('--topk', nargs='+', type=int, default=[2])
     parser.add_argument('--num_blocks', nargs='+', type=int, default=[4])
@@ -66,7 +67,7 @@ def parse_args():
     parser.add_argument("--blocked_grad", type=bool, default=True)
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=128,
+    parser.add_argument("--num-envs", type=int, default=64,
         help="the number of parallel game environments")
     parser.add_argument("--device_num", type=int, default=0,
                         help="the number of parallel game environments")
@@ -265,7 +266,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
         print(f'loading model ... {args.run_name}')
-        # wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         checkpoint = torch.load(os.path.join(checkpoint_path, f"{args.run_name}_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -291,7 +292,7 @@ if __name__ == "__main__":
     total_params = sum(p.numel() for p in agent.parameters() if p.requires_grad)
     print("Model Built with Total Number of Trainable Parameters: " + str(total_params))
 
-    ''' 
+
     run = wandb.init(project=args.wandb_project_name,
             entity=args.wandb_entity,
             config=vars(args),
@@ -299,7 +300,7 @@ if __name__ == "__main__":
             monitor_gym=True,
             save_code=True,
             id = run_name,
-            resume=True)'''
+            resume=True)
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -360,6 +361,8 @@ if __name__ == "__main__":
             next_obs[1:args.num_envs:4, :, :, :] = next_obs[1:args.num_envs:4, :, :, :] - 40
             next_obs[2:args.num_envs:4, :, :, :] = next_obs[2:args.num_envs:4, :, :, :] - 80
             next_obs[3:args.num_envs:4, :, :, :] = next_obs[3:args.num_envs:4, :, :, :] - 120
+
+
             next_obs = np.clip(next_obs, a_min=0, a_max=255)
 
             rewards[step] = torch.tensor(reward).to(device).view(-1)
@@ -369,11 +372,11 @@ if __name__ == "__main__":
                 if "episode" in item.keys():
                     print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
-                    #wandb.log({
-                    #    "charts/average_20_last_score_episodes": np.average(avg_returns),
-                    #    "charts/episodic_return": item["episode"]["r"],
-                    #    "charts/episodic_length": item["episode"]["l"]
-                    #}, step=global_step)
+                    wandb.log({
+                        "charts/average_20_last_score_episodes": np.average(avg_returns),
+                        "charts/episodic_return": item["episode"]["r"],
+                        "charts/episodic_length": item["episode"]["l"]
+                    }, step=global_step)
 
                     break
 
@@ -418,18 +421,21 @@ if __name__ == "__main__":
         mean_advantages = b_advantages.mean()
 
         b_rewards = torch.sum(rewards, dim=0)
-        print(b_rewards)
+        #print(b_rewards)
         # print(b_rewards.shape)
         # print(b_rewards.dtype)
 
         # exit()
         b_rewards = torch.mean(b_rewards)
-        print(b_rewards)
+        #print(b_rewards)
 
         if max_rewards < b_rewards.item():
             print(f'max_rewards: {max_rewards} | b_rewards: {b_rewards.item()}')
             max_rewards = b_rewards.item()
-            print(max_rewards)
+            #print(max_rewards)
+            wandb.log({
+                "charts/max_rewards": max_rewards
+            }, step=global_step)
             torch.save({'update': update,
                         'global_step': global_step,
                         'model_state_dict': agent.state_dict(),
@@ -513,7 +519,7 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         print("SPS:", int(global_step / (time.time() - start_time)))
-    ''' 
+
         wandb.log({
             "charts/learning_rate": optimizer.param_groups[0]["lr"],
             "losses/value_loss": v_loss.item(),
@@ -524,15 +530,15 @@ if __name__ == "__main__":
             "losses/clipfrac": np.mean(clipfracs),
             "losses/explained_variance": explained_var,
             "charts/SPS": int(global_step / (time.time() - start_time))
-        }, step=global_step)'''
+        }, step=global_step)
 
-    ''' 
+
         torch.save({'update': update,
                     'global_step': global_step,
                     'epoch': epoch,
                     'model_state_dict': agent.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_model.pth"))
-        wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))'''
+        wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
 
     envs.close()
