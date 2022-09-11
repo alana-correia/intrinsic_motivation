@@ -28,7 +28,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default="predictive_agent_estrutura_ambiente",
+    parser.add_argument("--exp-name", type=str, default="Brims_predictive_estrutura_ambiente",
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
@@ -303,7 +303,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
         print(f'loading model ... {args.run_name}')
-        #wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         checkpoint = torch.load(os.path.join(checkpoint_path, f"{args.run_name}_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -403,35 +403,59 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
 
+
+
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, ex_reward, done, info = envs.step(action.cpu().numpy())
 
-            idx = next_obs[:, :, :, :] > 0
-            next_obs[idx] = 255.
+            next_obs_f = next_obs_f.cpu().data.numpy()
+            next_obs_f[:, 0, :75, :] = next_obs[:, 0, :75, :] - next_obs[:, 1, :75, :]
+            next_obs_f[:, 0, 75:, 5:79] = next_obs[:, 1, 75:, 5:79] + next_obs[:, 0, 75:, 5:79]
 
-            #plt.imshow(next_obs[0, 0, :, :], cmap='gray')
+            next_obs_f[:, 1, :75, :] = next_obs[:, 1, :75, :] - next_obs[:, 2, :75, :]
+            next_obs_f[:, 1, 75:, 5:79] = next_obs[:, 2, 75:, 5:79] + next_obs[:, 1, 75:, 5:79]
+
+            next_obs_f[:, 2, :75, :] = next_obs[:, 2, :75, :] - next_obs[:, 3, :75, :]
+            next_obs_f[:, 2, 75:, 5:79] = next_obs[:, 3, 75:, 5:79] + next_obs[:, 2, 75:, 5:79]
+
+            next_obs_f[:, 3, :75, :] = next_obs[:, 3, :75, :] - next_obs[:, 4, :75, :]
+            next_obs_f[:, 3, 75:, 5:79] = next_obs[:, 3, 75:, 5:79] + next_obs[:, 4, 75:, 5:79]
+            #next_obs_f[:, 1, :, :] = next_obs[:, 2, :, :] - next_obs[:, 1, :, :]
+            #next_obs_f[:, 2, :, :] = next_obs[:, 3, :, :] - next_obs[:, 2, :, :]
+            #next_obs_f[:, 3, :, :] = next_obs[:, 4, :, :] - next_obs[:, 3, :, :]
+            #plt.imshow(result[0, :, :], cmap='gray')
             #plt.show()
+            plt.imshow(next_obs[0, 0, :, :], cmap='gray')
+            plt.show()
+
+            plt.imshow(next_obs[0, 1, :, :], cmap='gray')
+            plt.show()
 
             #plt.imshow(next_obs[0, 1, :, :], cmap='gray')
             #plt.show()
-            next_obs_f = next_obs_f.cpu().data.numpy()
-            next_obs_f[:, 0, :, :] = np.subtract(next_obs[:, 1, :, :], next_obs[:, 0, :, :])
-            next_obs_f[:, 1, :, :] = np.subtract(next_obs[:, 2, :, :], next_obs[:, 1, :, :])
-            next_obs_f[:, 2, :, :] = np.subtract(next_obs[:, 3, :, :], next_obs[:, 2, :, :])
-            next_obs_f[:, 3, :, :] = np.subtract(next_obs[:, 4, :, :], next_obs[:, 3, :, :])
+            #next_obs_f = next_obs_f.cpu().data.numpy()
+            #next_obs_f[:, 0, :, :] = np.subtract(next_obs[:, 1, :, :], next_obs[:, 0, :, :])
+            #next_obs_f[:, 1, :, :] = np.subtract(next_obs[:, 2, :, :], next_obs[:, 1, :, :])
+            #next_obs_f[:, 2, :, :] = np.subtract(next_obs[:, 3, :, :], next_obs[:, 2, :, :])
+            #next_obs_f[:, 3, :, :] = np.subtract(next_obs[:, 4, :, :], next_obs[:, 3, :, :])
 
-            #idx = next_obs_f[:, :, :, :] == 0.
-            #next_obs_f[idx] = 255.
+
 
             #idx = next_obs_f[:, :, :, :] == 255.
             #next_obs_f[idx] = 0.
 
-            next_obs_f = 255 - next_obs_f
-            next_obs_f = np.clip(next_obs_f, a_min=0, a_max=255)
+            #next_obs_f = 255 - next_obs_f
+            next_obs_f = np.clip(next_obs_f, a_min=0.0, a_max=255.0)
+            idx = next_obs_f[:, :, :, :] == 0.
+            next_obs_f[idx] = 40.
 
+            #print(np.unique(next_obs_f))
 
-            #plt.imshow(next_obs_f[0, 0, :, :], cmap='gray')
-            #plt.show()
+            #print(np.min(next_obs_f))
+            #print(np.max(next_obs_f))
+
+            plt.imshow(next_obs_f[0, 0, :, :], cmap='gray')
+            plt.show()
             #plt.imshow(next_obs_f[0, 1, :, :], cmap='gray')
             #plt.show()
             #plt.imshow(next_obs_f[0, 2, :, :], cmap='gray')
@@ -451,6 +475,7 @@ if __name__ == "__main__":
                 if "episode" in item.keys():
                     print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
+
 
                     wandb.log({
                         "charts/average_20_last_score_episodes": np.average(avg_returns),
