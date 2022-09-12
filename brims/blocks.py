@@ -67,15 +67,15 @@ class Blocks(nn.Module):
 
         for idx_layer in range(self.nlayers):
             #print(f' Camada {idx_layer} - inp_use: {inp_use.shape} hx_0: {hx[0].shape} hx_1: {hx[1].shape}')
-            hx_, cx_ = self.bc_lst[idx_layer](inp_use, hx, cx, idx_layer)
+            hx_, cx_, mask_ = self.bc_lst[idx_layer](inp_use, hx, cx, idx_layer)
 
             hx_new.append(hx_)
             cx_new.append(cx_)
-
+            mask_new.append(mask_)
             inp_use = hx_
 
         lstm_state = (hx_new, cx_new)
-        return lstm_state
+        return lstm_state, mask_new
 
 
 if __name__ == "__main__":

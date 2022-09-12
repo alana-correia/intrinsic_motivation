@@ -161,7 +161,7 @@ class BlocksCore(nn.Module):
         #print(self.topkval)
 
         assert(torch.mean(torch.sum(mask, dim=1)).item() == self.topkval)
-
+        mask_activate = mask.detach()
         mask = mask.reshape((inp_use.shape[0],self.num_blocks_out,1)).repeat((1,1,self.block_size_out)).reshape((inp_use.shape[0], self.num_blocks_out*self.block_size_out))
 
         mask = mask.detach()
@@ -187,7 +187,7 @@ class BlocksCore(nn.Module):
         hx = (mask)*hx_new + (1-mask)*hx_old
         cx = (mask)*cx_new + (1-mask)*cx_old
 
-        return hx, cx
+        return hx, cx, mask_activate
 
 
 if __name__ == "__main__":

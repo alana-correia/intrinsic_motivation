@@ -28,7 +28,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default="Brims_predictive_estrutura_ambiente",
+    parser.add_argument("--exp-name", type=str, default="Brims_predictive_mais_reward_activacao_blocos",
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
@@ -38,7 +38,7 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--frame_stack", type=int, default=5,
+    parser.add_argument("--frame_stack", type=int, default=4,
                         help="frame stack num")
 
     parser.add_argument("--total-timesteps", type=int, default=210000000,
@@ -204,7 +204,7 @@ class AgentCuriosity(nn.Module):
         #print(f'embs (fora do for): {embs.shape}')
         for emb in embs:
             #print(f'emb (dentro do for): {emb.shape}')
-            lstm_state = self.brims_p(emb, lstm_state)
+            lstm_state, mask_p = self.brims_p(emb, lstm_state)
             #new_hidden += [lstm_state[0][-1]]
 
             new_hidden.append(lstm_state[0][-1])
@@ -214,21 +214,21 @@ class AgentCuriosity(nn.Module):
         new_hidden = new_hidden.view(embs.shape[0]*batch_size, self.nhid[-1])
         #print(f'após a chamada da lstm new hidden shape: {new_hidden.shape}')
         #exit()
-        return embs, new_hidden, lstm_state
+        return embs, new_hidden, lstm_state, mask_p
 
     def get_value(self, x, lstm_state):
-        _, hidden, lstm_state = self.get_states(x, lstm_state)
+        _, hidden, lstm_state, _ = self.get_states(x, lstm_state)
         return self.critic(hidden)
 
     def get_action_and_value(self, x, lstm_state, action=None):
-        embs, hidden, lstm_state = self.get_states(x, lstm_state)
+        embs, hidden, lstm_state, mask_p = self.get_states(x, lstm_state)
         logits = self.actor(hidden)
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden), lstm_state, embs, hidden
+        return action, probs.log_prob(action), probs.entropy(), self.critic(hidden), lstm_state, embs, hidden, mask_p
 
-    def compute_intrinsic_reward(self, enc_ts, actual_brims_p, exp_hidden_f, lstm_state):
+    def compute_intrinsic_reward(self, enc_ts, actual_mask_brims_p, exp_hidden_f, lstm_state):
         batch_size = lstm_state[0][0].shape[0]
         input_size = lstm_state[0][0].shape[1]
         enc_ts = enc_ts.reshape((-1, batch_size, input_size))
@@ -237,7 +237,7 @@ class AgentCuriosity(nn.Module):
         # print(f'embs (fora do for): {embs.shape}')
         for enc_t in enc_ts:
             # print(f'emb (dentro do for): {emb.shape}')
-            lstm_state = self.brims_f(enc_t, lstm_state)
+            lstm_state, mask_f = self.brims_f(enc_t, lstm_state)
             # new_hidden += [lstm_state[0][-1]]
 
             new_hidden_f.append(lstm_state[0][-1])
@@ -247,8 +247,10 @@ class AgentCuriosity(nn.Module):
         new_hidden_f = new_hidden_f.view(enc_ts.shape[0] * batch_size, self.nhid[-1])
         # print(f'após a chamada da lstm new hidden shape: {new_hidden.shape}')
         # exit()
-        intrinsic_reward = F.mse_loss(actual_brims_p, exp_hidden_f, reduction='none').mean(-1)
-        return intrinsic_reward.detach(), lstm_state, new_hidden_f
+        #intrinsic_reward = F.mse_loss(actual_brims_p, exp_hidden_f, reduction='none').mean(-1)
+        intrinsic_reward = torch.mul(actual_mask_brims_p[0], mask_f[0])
+        intrinsic_reward = torch.sum(intrinsic_reward, 1)
+        return intrinsic_reward.detach(), lstm_state, new_hidden_f, mask_f
 
 
 
@@ -275,7 +277,7 @@ if __name__ == "__main__":
         json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
 
         device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-        agent = AgentCuriosity(args.frame_stack-1, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
+        agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
                                args.topk,
                                args.use_inactive, args.blocked_grad).to(device)
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -297,7 +299,7 @@ if __name__ == "__main__":
         args = function_with_args_and_default_kwargs(**args)
         args.run_name = run_name
         device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-        agent = AgentCuriosity(args.frame_stack-1, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
+        agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
                                args.topk,
                                args.use_inactive, args.blocked_grad).to(device)
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -349,7 +351,7 @@ if __name__ == "__main__":
     print("Model Built with Total Number of Trainable Parameters: " + str(total_params))
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + (args.frame_stack-1, 84, 84)).to(device)
+    obs = torch.zeros((args.num_steps, args.num_envs) + (args.frame_stack, 84, 84)).to(device)
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -362,14 +364,13 @@ if __name__ == "__main__":
     start_time = time.time()
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
-    next_obs_f = np.zeros((args.num_envs, args.frame_stack-1, 84, 84), dtype=float)
-    next_obs_f = torch.Tensor(next_obs_f).to(device)
 
     next_lstm_state_p = agent.init_hidden_p(args.num_envs)
     next_lstm_state_f = agent.init_hidden_f(args.num_envs)
 
-    exp_hidden = torch.zeros((args.num_envs, args.num_steps)).to(device)
-
+    mask_f = torch.randint(0, 2, (args.num_envs, args.num_steps)).to(device)
+    #print(torch.unique(mask_f))
+    #exit()
     num_updates = args.total_timesteps // args.batch_size
 
     for update in range(update_init, num_updates + 1):
@@ -386,16 +387,16 @@ if __name__ == "__main__":
 
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
-            obs[step] = next_obs_f
+            obs[step] = next_obs
             dones[step] = next_done
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
                 #next_obs = next_obs.reshape(1, 8, 1, 84, 84)
-                action, logprob, _, value, next_lstm_state_p, embs_t, actual_hidden = agent.get_action_and_value(next_obs_f, next_lstm_state_p)
+                action, logprob, _, value, next_lstm_state_p, embs_t, actual_hidden, mask_p = agent.get_action_and_value(next_obs, next_lstm_state_p)
                 #hidden = repackage_hidden(hidden)
 
-                im_reward, next_lstm_state_f, exp_hidden = agent.compute_intrinsic_reward(embs_t, actual_hidden, exp_hidden, next_lstm_state_f)
+                im_reward, next_lstm_state_f, exp_hidden, mask_f = agent.compute_intrinsic_reward(embs_t, mask_p, mask_f, next_lstm_state_f)
 
 
                 values[step] = value.flatten()
@@ -408,64 +409,10 @@ if __name__ == "__main__":
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, ex_reward, done, info = envs.step(action.cpu().numpy())
 
-            next_obs_f = next_obs_f.cpu().data.numpy()
-            next_obs_f[:, 0, :75, :] = next_obs[:, 0, :75, :] - next_obs[:, 1, :75, :]
-            next_obs_f[:, 0, 75:, 5:79] = next_obs[:, 1, 75:, 5:79] + next_obs[:, 0, 75:, 5:79]
-
-            next_obs_f[:, 1, :75, :] = next_obs[:, 1, :75, :] - next_obs[:, 2, :75, :]
-            next_obs_f[:, 1, 75:, 5:79] = next_obs[:, 2, 75:, 5:79] + next_obs[:, 1, 75:, 5:79]
-
-            next_obs_f[:, 2, :75, :] = next_obs[:, 2, :75, :] - next_obs[:, 3, :75, :]
-            next_obs_f[:, 2, 75:, 5:79] = next_obs[:, 3, 75:, 5:79] + next_obs[:, 2, 75:, 5:79]
-
-            next_obs_f[:, 3, :75, :] = next_obs[:, 3, :75, :] - next_obs[:, 4, :75, :]
-            next_obs_f[:, 3, 75:, 5:79] = next_obs[:, 3, 75:, 5:79] + next_obs[:, 4, 75:, 5:79]
-            #next_obs_f[:, 1, :, :] = next_obs[:, 2, :, :] - next_obs[:, 1, :, :]
-            #next_obs_f[:, 2, :, :] = next_obs[:, 3, :, :] - next_obs[:, 2, :, :]
-            #next_obs_f[:, 3, :, :] = next_obs[:, 4, :, :] - next_obs[:, 3, :, :]
-            #plt.imshow(result[0, :, :], cmap='gray')
-            #plt.show()
-            plt.imshow(next_obs[0, 0, :, :], cmap='gray')
-            plt.show()
-
-            plt.imshow(next_obs[0, 1, :, :], cmap='gray')
-            plt.show()
-
-            #plt.imshow(next_obs[0, 1, :, :], cmap='gray')
-            #plt.show()
-            #next_obs_f = next_obs_f.cpu().data.numpy()
-            #next_obs_f[:, 0, :, :] = np.subtract(next_obs[:, 1, :, :], next_obs[:, 0, :, :])
-            #next_obs_f[:, 1, :, :] = np.subtract(next_obs[:, 2, :, :], next_obs[:, 1, :, :])
-            #next_obs_f[:, 2, :, :] = np.subtract(next_obs[:, 3, :, :], next_obs[:, 2, :, :])
-            #next_obs_f[:, 3, :, :] = np.subtract(next_obs[:, 4, :, :], next_obs[:, 3, :, :])
-
-
-
-            #idx = next_obs_f[:, :, :, :] == 255.
-            #next_obs_f[idx] = 0.
-
-            #next_obs_f = 255 - next_obs_f
-            next_obs_f = np.clip(next_obs_f, a_min=0.0, a_max=255.0)
-            idx = next_obs_f[:, :, :, :] == 0.
-            next_obs_f[idx] = 40.
-
-            #print(np.unique(next_obs_f))
-
-            #print(np.min(next_obs_f))
-            #print(np.max(next_obs_f))
-
-            plt.imshow(next_obs_f[0, 0, :, :], cmap='gray')
-            plt.show()
-            #plt.imshow(next_obs_f[0, 1, :, :], cmap='gray')
-            #plt.show()
-            #plt.imshow(next_obs_f[0, 2, :, :], cmap='gray')
-            #plt.show()
-            #plt.imshow(next_obs_f[0, 3, :, :], cmap='gray')
-            #plt.show()
 
             rewards[step] = im_reward
             rewards_ex[step] = torch.tensor(ex_reward).to(device)
-            next_obs_f, next_done = torch.Tensor(next_obs_f).to(device), torch.Tensor(done).to(device)
+            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
             #exit()
 
             #print(type(info))
@@ -475,12 +422,13 @@ if __name__ == "__main__":
                 if "episode" in item.keys():
                     print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
-
+                    sum_reward_by_env = torch.sum(rewards[:,id])
 
                     wandb.log({
                         "charts/average_20_last_score_episodes": np.average(avg_returns),
                         "charts/episodic_return": item["episode"]["r"],
-                        "charts/episodic_length": item["episode"]["l"]
+                        "charts/episodic_length": item["episode"]["l"],
+                        "charts/sum_intrinsic_reward": sum_reward_by_env.item(),
                     }, step=global_step)
 
                     #writer.add_scalar("episode-charts/average_20_last_score_episodes", np.average(avg_returns),
@@ -492,7 +440,7 @@ if __name__ == "__main__":
         # bootstrap value if not done
         with torch.no_grad():
 
-            next_value = agent.get_value(next_obs_f, next_lstm_state_p).reshape(1, -1)
+            next_value = agent.get_value(next_obs, next_lstm_state_p).reshape(1, -1)
 
             if args.gae:
                 advantages = torch.zeros_like(rewards).to(device)
@@ -520,7 +468,7 @@ if __name__ == "__main__":
                 advantages = returns - values
 
         # flatten the batch
-        b_obs = obs.reshape((-1,) + (args.frame_stack-1, 84, 84))
+        b_obs = obs.reshape((-1,) + (args.frame_stack, 84, 84))
 
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
@@ -574,7 +522,7 @@ if __name__ == "__main__":
                 [hx_mb_p.append(initial_lstm_state_p[0][i][mbenvinds]) for i in range(args.nlayers)]
                 [cx_mb_p.append(initial_lstm_state_p[1][i][mbenvinds]) for i in range(args.nlayers)]
 
-                _, newlogprob, entropy, newvalue, _ , embs, h_current = agent.get_action_and_value(
+                _, newlogprob, entropy, newvalue, _ , embs, h_current, mask_p = agent.get_action_and_value(
                     b_obs[mb_inds],
                     (hx_mb_p, cx_mb_p),
                     b_actions.long()[mb_inds],
@@ -585,7 +533,7 @@ if __name__ == "__main__":
                 [hx_mb_f.append(initial_lstm_state_f[0][i][mbenvinds]) for i in range(args.nlayers)]
                 [cx_mb_f.append(initial_lstm_state_f[1][i][mbenvinds]) for i in range(args.nlayers)]
 
-                _, _ , exp_hidden = agent.compute_intrinsic_reward(embs_t, actual_hidden, exp_hidden, (hx_mb_f, cx_mb_f))
+                _, _ , exp_hidden, mask_f = agent.compute_intrinsic_reward(embs_t, mask_p, mask_f, (hx_mb_f, cx_mb_f))
 
 
 
