@@ -5,6 +5,7 @@ import time
 from distutils.util import strtobool
 from collections import deque
 import gym
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
@@ -27,7 +28,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp-name", type=str, default="cnn_brims_mlp_mlp_hibrid_reward",
+    parser.add_argument("--exp-name", type=str, default="Brims_predictive_estrutura_ambiente",
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
@@ -37,14 +38,8 @@ def parse_args():
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
-    parser.add_argument("--frame_stack", type=int, default=4,
+    parser.add_argument("--frame_stack", type=int, default=5,
                         help="frame stack num")
-
-    parser.add_argument("--im_weight", type=float, default=0.8,
-                        help="intrinsic motivation reward weight")
-
-    parser.add_argument("--em_weight", type=float, default=0.2,
-                        help="extrinsic motivation reward weight")
 
     parser.add_argument("--total-timesteps", type=int, default=210000000,
         help="total timesteps of the experiments")
@@ -74,7 +69,7 @@ def parse_args():
     parser.add_argument("--blocked_grad", type=bool, default=True)
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=32,
+    parser.add_argument("--num-envs", type=int, default=64,
         help="the number of parallel game environments")
     parser.add_argument("--device_num", type=int, default=0,
                         help="the number of parallel game environments")
@@ -88,7 +83,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches", type=int, default=4,
+    parser.add_argument("--num-minibatches", type=int, default=8,
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
@@ -127,7 +122,7 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
         #env = EpisodicLifeEnv(env)
         #if "FIRE" in env.unwrapped.get_action_meanings():
         #env = FireResetEnv(env)
-        #env = ClipRewardEnv(env)
+        env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, frame_stack)
@@ -269,6 +264,8 @@ def function_with_args_and_default_kwargs(optional_args=None, **kwargs):
 
 if __name__ == "__main__":
     args = parse_args()
+    # new model
+    print(args.run_name)
     if args.run_name is None:
         run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
@@ -276,18 +273,44 @@ if __name__ == "__main__":
             os.makedirs(checkpoint_path)
 
         json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
+
+        device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+        agent = AgentCuriosity(args.frame_stack-1, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
+                               args.topk,
+                               args.use_inactive, args.blocked_grad).to(device)
+        optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+
+        print(f'new model ... {run_name}')
+        update_init = 1
+        global_step = 0
+        args.run_name = run_name
+        max_rewards = 0.0
+
+    # load model
     else:
+        run_name = args.run_name
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
         # checkpoint_path = '/home/brain/alana/checkpoints/intrinsic'
-        f = open(os.path.join(checkpoint_path, f"{run_name}_args.json"), "r")
+        f = open(os.path.join(checkpoint_path, f"{args.run_name}_args.json"), "r")
         args = json.loads(f.read())
 
         args = function_with_args_and_default_kwargs(**args)
         args.run_name = run_name
+        device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+        agent = AgentCuriosity(args.frame_stack-1, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
+                               args.topk,
+                               args.use_inactive, args.blocked_grad).to(device)
+        optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    print(f'RUN NAME: {run_name}')
-
-
+        print(f'loading model ... {args.run_name}')
+        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        checkpoint = torch.load(os.path.join(checkpoint_path, f"{args.run_name}_model.pth"))
+        agent.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        update_init = checkpoint['update']
+        global_step = checkpoint['global_step']
+        max_rewards = checkpoint['max_rewards']
+        print(f'load model OK ... update_init {update_init} | global_step {global_step}')
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -307,21 +330,12 @@ if __name__ == "__main__":
         print("CUDA is not used")
     # env setup
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.frame_stack, args.capture_video, run_name) for i in
+        [make_env(args.gym_id, args.seed + random.randint(0, 1000), i, args.frame_stack, args.capture_video, run_name) for i in
          range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
-                       args.use_inactive, args.blocked_grad).to(device)
 
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
-
-    best_return = 0
-    best_return_block = 0
-    cont_episodes = 0
-
-    ''' 
     run = wandb.init(project=args.wandb_project_name,
                      entity=args.wandb_entity,
                      config=vars(args),
@@ -329,34 +343,17 @@ if __name__ == "__main__":
                      monitor_gym=True,
                      save_code=True,
                      id=run_name,
-                     resume=True)'''
-
-    if args.run_name is not None:
-        print(f'loading model ... {run_name}')
-        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
-        checkpoint = torch.load(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
-        agent.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        update_init = checkpoint['update']
-        global_step = checkpoint['global_step']
-        # best_return = checkpoint['best_return']
-        # best_return_six = checkpoint['best_return_six']
-        print(f'load model OK ... update_init {update_init} | global_step {global_step}')
-    else:
-        print(f'new model ... {run_name}')
-        update_init = 1
-        global_step = 0
-
-
+                     resume=True)
 
     total_params = sum(p.numel() for p in agent.parameters() if p.requires_grad)
     print("Model Built with Total Number of Trainable Parameters: " + str(total_params))
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+    obs = torch.zeros((args.num_steps, args.num_envs) + (args.frame_stack-1, 84, 84)).to(device)
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    rewards_ex = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     values = torch.zeros((args.num_steps, args.num_envs)).to(device)
     avg_returns = deque(maxlen=20)
@@ -365,7 +362,8 @@ if __name__ == "__main__":
     start_time = time.time()
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
-
+    next_obs_f = np.zeros((args.num_envs, args.frame_stack-1, 84, 84), dtype=float)
+    next_obs_f = torch.Tensor(next_obs_f).to(device)
 
     next_lstm_state_p = agent.init_hidden_p(args.num_envs)
     next_lstm_state_f = agent.init_hidden_f(args.num_envs)
@@ -388,13 +386,13 @@ if __name__ == "__main__":
 
         for step in range(0, args.num_steps):
             global_step += 1 * args.num_envs
-            obs[step] = next_obs
+            obs[step] = next_obs_f
             dones[step] = next_done
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
                 #next_obs = next_obs.reshape(1, 8, 1, 84, 84)
-                action, logprob, _, value, next_lstm_state_p, embs_t, actual_hidden = agent.get_action_and_value(next_obs, next_lstm_state_p)
+                action, logprob, _, value, next_lstm_state_p, embs_t, actual_hidden = agent.get_action_and_value(next_obs_f, next_lstm_state_p)
                 #hidden = repackage_hidden(hidden)
 
                 im_reward, next_lstm_state_f, exp_hidden = agent.compute_intrinsic_reward(embs_t, actual_hidden, exp_hidden, next_lstm_state_f)
@@ -405,14 +403,69 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
 
+
+
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, ex_reward, done, info = envs.step(action.cpu().numpy())
-            ex_reward = torch.tensor(ex_reward).to(device).view(-1)
-            total_reward = im_reward
-            #print(f'reward externa: {ex_reward} shape: {ex_reward.shape}')
-            #print(f'reward interna: {im_reward} shape: {im_reward.shape}')
-            rewards[step] = total_reward
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+
+            next_obs_f = next_obs_f.cpu().data.numpy()
+            next_obs_f[:, 0, :75, :] = next_obs[:, 0, :75, :] - next_obs[:, 1, :75, :]
+            next_obs_f[:, 0, 75:, 5:79] = next_obs[:, 1, 75:, 5:79] + next_obs[:, 0, 75:, 5:79]
+
+            next_obs_f[:, 1, :75, :] = next_obs[:, 1, :75, :] - next_obs[:, 2, :75, :]
+            next_obs_f[:, 1, 75:, 5:79] = next_obs[:, 2, 75:, 5:79] + next_obs[:, 1, 75:, 5:79]
+
+            next_obs_f[:, 2, :75, :] = next_obs[:, 2, :75, :] - next_obs[:, 3, :75, :]
+            next_obs_f[:, 2, 75:, 5:79] = next_obs[:, 3, 75:, 5:79] + next_obs[:, 2, 75:, 5:79]
+
+            next_obs_f[:, 3, :75, :] = next_obs[:, 3, :75, :] - next_obs[:, 4, :75, :]
+            next_obs_f[:, 3, 75:, 5:79] = next_obs[:, 3, 75:, 5:79] + next_obs[:, 4, 75:, 5:79]
+            #next_obs_f[:, 1, :, :] = next_obs[:, 2, :, :] - next_obs[:, 1, :, :]
+            #next_obs_f[:, 2, :, :] = next_obs[:, 3, :, :] - next_obs[:, 2, :, :]
+            #next_obs_f[:, 3, :, :] = next_obs[:, 4, :, :] - next_obs[:, 3, :, :]
+            #plt.imshow(result[0, :, :], cmap='gray')
+            #plt.show()
+            plt.imshow(next_obs[0, 0, :, :], cmap='gray')
+            plt.show()
+
+            plt.imshow(next_obs[0, 1, :, :], cmap='gray')
+            plt.show()
+
+            #plt.imshow(next_obs[0, 1, :, :], cmap='gray')
+            #plt.show()
+            #next_obs_f = next_obs_f.cpu().data.numpy()
+            #next_obs_f[:, 0, :, :] = np.subtract(next_obs[:, 1, :, :], next_obs[:, 0, :, :])
+            #next_obs_f[:, 1, :, :] = np.subtract(next_obs[:, 2, :, :], next_obs[:, 1, :, :])
+            #next_obs_f[:, 2, :, :] = np.subtract(next_obs[:, 3, :, :], next_obs[:, 2, :, :])
+            #next_obs_f[:, 3, :, :] = np.subtract(next_obs[:, 4, :, :], next_obs[:, 3, :, :])
+
+
+
+            #idx = next_obs_f[:, :, :, :] == 255.
+            #next_obs_f[idx] = 0.
+
+            #next_obs_f = 255 - next_obs_f
+            next_obs_f = np.clip(next_obs_f, a_min=0.0, a_max=255.0)
+            idx = next_obs_f[:, :, :, :] == 0.
+            next_obs_f[idx] = 40.
+
+            #print(np.unique(next_obs_f))
+
+            #print(np.min(next_obs_f))
+            #print(np.max(next_obs_f))
+
+            plt.imshow(next_obs_f[0, 0, :, :], cmap='gray')
+            plt.show()
+            #plt.imshow(next_obs_f[0, 1, :, :], cmap='gray')
+            #plt.show()
+            #plt.imshow(next_obs_f[0, 2, :, :], cmap='gray')
+            #plt.show()
+            #plt.imshow(next_obs_f[0, 3, :, :], cmap='gray')
+            #plt.show()
+
+            rewards[step] = im_reward
+            rewards_ex[step] = torch.tensor(ex_reward).to(device)
+            next_obs_f, next_done = torch.Tensor(next_obs_f).to(device), torch.Tensor(done).to(device)
             #exit()
 
             #print(type(info))
@@ -422,53 +475,24 @@ if __name__ == "__main__":
                 if "episode" in item.keys():
                     print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
-                    '''
+
+
                     wandb.log({
                         "charts/average_20_last_score_episodes": np.average(avg_returns),
                         "charts/episodic_return": item["episode"]["r"],
-                        "charts/intrinsic_reward (sem peso)": im_reward[id].item(),
-                        "charts/extrinsic_reward (sem peso)": ex_reward[id].item(),
-                        "charts/intrinsic_reward (com peso)": args.im_weight*im_reward[id].item(),
-                        "charts/extrinsic_reward (com peso)": args.em_weight*ex_reward[id].item(),
-                        "charts/total_reward (peso_e*re + peso_i*ri)": total_reward[id].item(),
                         "charts/episodic_length": item["episode"]["l"]
-                    }, step=global_step)'''
+                    }, step=global_step)
 
                     #writer.add_scalar("episode-charts/average_20_last_score_episodes", np.average(avg_returns),
                     #                  global_step)
                     #writer.add_scalar("charts/episodic_return", item["episode"]["r"], global_step)
                     #writer.add_scalar("charts/episodic_length", item["episode"]["l"], global_step)
-
-                    if best_return < item["episode"]["r"]:
-                        best_return = item["episode"]["r"]
-                        torch.save({'update': update,
-                                    'global_step': global_step,
-                                    'best_return': item["episode"]["r"],
-                                    'model_state_dict': agent.state_dict(),
-                                    'optimizer_state_dict': optimizer.state_dict(),
-                                    'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_best_model.pth"))
-                        #wandb.save(os.path.join(checkpoint_path, f"{run_name}_best_model.pth"))
-
-                    if best_return_block <= item["episode"]["r"]:
-                        best_return_block = item["episode"]["r"]
-                        cont_episodes += 1
-                        if cont_episodes == 4:
-                            cont_episodes = 0
-                            torch.save({'update': update,
-                                        'global_step': global_step,
-                                        'best_return_block': item["episode"]["r"],
-                                        'model_state_dict': agent.state_dict(),
-                                        'optimizer_state_dict': optimizer.state_dict(),
-                                        'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_best_model_block.pth"))
-                            #wandb.save(os.path.join(checkpoint_path, f"{run_name}_best_model_block.pth"))
-
-
                     break
 
         # bootstrap value if not done
         with torch.no_grad():
 
-            next_value = agent.get_value(next_obs, next_lstm_state_p).reshape(1, -1)
+            next_value = agent.get_value(next_obs_f, next_lstm_state_p).reshape(1, -1)
 
             if args.gae:
                 advantages = torch.zeros_like(rewards).to(device)
@@ -496,7 +520,7 @@ if __name__ == "__main__":
                 advantages = returns - values
 
         # flatten the batch
-        b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+        b_obs = obs.reshape((-1,) + (args.frame_stack-1, 84, 84))
 
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
@@ -504,6 +528,29 @@ if __name__ == "__main__":
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
         mean_advantages = b_advantages.mean()
+
+        b_rewards = torch.sum(rewards_ex, dim=0)
+        # print(b_rewards)
+        # print(b_rewards.shape)
+        # print(b_rewards.dtype)
+
+        # exit()
+        b_rewards = torch.mean(b_rewards)
+        # print(b_rewards)
+
+        if max_rewards < b_rewards.item():
+            print(f'max_rewards: {max_rewards} | b_rewards: {b_rewards.item()}')
+            max_rewards = b_rewards.item()
+            # print(max_rewards)
+            wandb.log({
+                "charts/max_rewards": max_rewards
+            }, step=global_step)
+            torch.save({'update': update,
+                        'global_step': global_step,
+                        'model_state_dict': agent.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'max_rewards': max_rewards},
+                       os.path.join(checkpoint_path, f"{run_name}_best_model_{global_step}.pth"))
 
         # Optimizing the policy and value network
         assert args.num_envs % args.num_minibatches == 0
@@ -593,7 +640,7 @@ if __name__ == "__main__":
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
-        ''' 
+
         wandb.log({
             "charts/learning_rate": optimizer.param_groups[0]["lr"],
             "losses/value_loss": v_loss.item(),
@@ -605,7 +652,7 @@ if __name__ == "__main__":
             "losses/explained_variance": explained_var,
             "losses/intrinsic_loss": loss_intrinsic.item(),
             "charts/SPS": int(global_step / (time.time() - start_time))
-        }, step=global_step)'''
+        }, step=global_step)
 
 
         print("SPS:", int(global_step / (time.time() - start_time)))
@@ -615,6 +662,6 @@ if __name__ == "__main__":
                     'model_state_dict': agent.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_model.pth"))
-        #wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
 
     envs.close()

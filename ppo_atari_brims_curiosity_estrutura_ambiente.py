@@ -425,11 +425,11 @@ if __name__ == "__main__":
             #next_obs_f[:, 3, :, :] = next_obs[:, 4, :, :] - next_obs[:, 3, :, :]
             #plt.imshow(result[0, :, :], cmap='gray')
             #plt.show()
-            plt.imshow(next_obs[0, 0, :, :], cmap='gray')
-            plt.show()
+            #plt.imshow(next_obs[0, 0, :, :], cmap='gray')
+            #plt.show()
 
-            plt.imshow(next_obs[0, 1, :, :], cmap='gray')
-            plt.show()
+            #plt.imshow(next_obs[0, 1, :, :], cmap='gray')
+            #plt.show()
 
             #plt.imshow(next_obs[0, 1, :, :], cmap='gray')
             #plt.show()
@@ -454,8 +454,8 @@ if __name__ == "__main__":
             #print(np.min(next_obs_f))
             #print(np.max(next_obs_f))
 
-            plt.imshow(next_obs_f[0, 0, :, :], cmap='gray')
-            plt.show()
+            #plt.imshow(next_obs_f[0, 0, :, :], cmap='gray')
+            #plt.show()
             #plt.imshow(next_obs_f[0, 1, :, :], cmap='gray')
             #plt.show()
             #plt.imshow(next_obs_f[0, 2, :, :], cmap='gray')
