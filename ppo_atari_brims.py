@@ -180,8 +180,13 @@ class AgentBrims(nn.Module):
 
     def get_states(self, x, lstm_state):
         embs = self.encoder(x / 255.0)
+        #print('typeee')
+        #print(type(lstm_state[0][0][-1]))
+        #print(lstm_state[0][0][-1].shape)
         batch_size = lstm_state[0][0].shape[0]
         input_size = lstm_state[0][0].shape[1]
+        #batch_size = 1
+        #input_size = 128
         embs = embs.reshape((-1, batch_size, input_size))
         new_hidden = []
         self.brims_blockify_params()

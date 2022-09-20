@@ -998,7 +998,8 @@ def function_with_args_and_default_kwargs(unk, **kwargs):
         parser.add_argument('--' + k, default=v)
     #args = parser.parse_args(optional_args)
     args, unknown = parser.parse_known_args(unk)
-    test_name = unknown[1]
+    #test_name = unknown[1]
+    test_name = "test_I"
     return args, test_name
 
 if __name__ == "__main__":
@@ -1013,7 +1014,7 @@ if __name__ == "__main__":
     if not os.path.exists(path_save):
         os.makedirs(path_save)
 
-    num_games = 2
+    num_games = 8
     num_envs = 1
 
     f = open(checkpoint_path, "r")
