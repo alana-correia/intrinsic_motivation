@@ -120,13 +120,13 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
         if capture_video:
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
-        if split == 'train':
-            env = NoopResetEnv(env, noop_max=30)
-        env = MaxAndSkipEnv(env, skip=skip)
         #if split == 'train':
-        env = EpisodicLifeEnv(env)
-        if "FIRE" in env.unwrapped.get_action_meanings():
-            env = FireResetEnv(env)
+        #env = NoopResetEnv(env, noop_max=30)
+        env = MaxAndSkipEnv(env, skip=skip)
+        if split == 'train':
+            env = EpisodicLifeEnv(env)
+        #if "FIRE" in env.unwrapped.get_action_meanings():
+        #    env = FireResetEnv(env)
         env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
@@ -210,7 +210,7 @@ class AgentCuriosity(nn.Module):
         #print(f'embs (fora do for): {embs.shape}')
         for emb in embs:
             #print(f'emb (dentro do for): {emb.shape}')
-            lstm_state = self.brims_p(emb, lstm_state)
+            lstm_state, _ = self.brims_p(emb, lstm_state)
             #new_hidden += [lstm_state[0][-1]]
 
             new_hidden.append(lstm_state[0][-1])
@@ -243,7 +243,7 @@ class AgentCuriosity(nn.Module):
         # print(f'embs (fora do for): {embs.shape}')
         for enc_t in enc_ts:
             # print(f'emb (dentro do for): {emb.shape}')
-            lstm_state = self.brims_f(enc_t, lstm_state)
+            lstm_state, _ = self.brims_f(enc_t, lstm_state)
             # new_hidden += [lstm_state[0][-1]]
 
             new_hidden_f.append(lstm_state[0][-1])

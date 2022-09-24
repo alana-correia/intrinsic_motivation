@@ -266,7 +266,7 @@ if __name__ == "__main__":
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
         print(f'loading model ... {args.run_name}')
-        wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        #wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         checkpoint = torch.load(os.path.join(checkpoint_path, f"{args.run_name}_model.pth"))
         agent.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     total_params = sum(p.numel() for p in agent.parameters() if p.requires_grad)
     print("Model Built with Total Number of Trainable Parameters: " + str(total_params))
 
-
+    ''' 
     run = wandb.init(project=args.wandb_project_name,
             entity=args.wandb_entity,
             config=vars(args),
@@ -298,7 +298,7 @@ if __name__ == "__main__":
             monitor_gym=True,
             save_code=True,
             id = run_name,
-            resume=True)
+            resume=True)'''
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -370,11 +370,11 @@ if __name__ == "__main__":
                 if "episode" in item.keys():
                     print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
-                    wandb.log({
+                    '''wandb.log({
                         "charts/average_20_last_score_episodes": np.average(avg_returns),
                         "charts/episodic_return": item["episode"]["r"],
                         "charts/episodic_length": item["episode"]["l"]
-                    }, step=global_step)
+                    }, step=global_step)'''
 
                     break
 
@@ -431,9 +431,9 @@ if __name__ == "__main__":
             print(f'max_rewards: {max_rewards} | b_rewards: {b_rewards.item()}')
             max_rewards = b_rewards.item()
             #print(max_rewards)
-            wandb.log({
+            '''wandb.log({
                 "charts/max_rewards": max_rewards
-            }, step=global_step)
+            }, step=global_step)'''
             torch.save({'update': update,
                         'global_step': global_step,
                         'model_state_dict': agent.state_dict(),
@@ -517,7 +517,7 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         print("SPS:", int(global_step / (time.time() - start_time)))
-
+        ''' 
         wandb.log({
             "charts/learning_rate": optimizer.param_groups[0]["lr"],
             "losses/value_loss": v_loss.item(),
@@ -528,7 +528,7 @@ if __name__ == "__main__":
             "losses/clipfrac": np.mean(clipfracs),
             "losses/explained_variance": explained_var,
             "charts/SPS": int(global_step / (time.time() - start_time))
-        }, step=global_step)
+        }, step=global_step)'''
 
 
         torch.save({'update': update,
@@ -537,6 +537,6 @@ if __name__ == "__main__":
                     'model_state_dict': agent.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_model.pth"))
-        wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
+        #wandb.save(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
 
     envs.close()

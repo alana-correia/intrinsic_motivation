@@ -589,11 +589,11 @@ def function_with_args_and_default_kwargs(unk, **kwargs):
 if __name__ == "__main__":
     #args = parse_args()
     run_name = "BreakoutNoFrameskip-v4__cnn_brims_mlp_mlp_extrinsic_reward__1__1657895196"
-    checkpoint_path = os.path.join("/home/brain/alana/checkpoints", f"{run_name}_args.json")
+    checkpoint_path = os.path.join("/home/brain/alana/checkpoints/brims_azul_baseline", f"{run_name}_args.json")
     print(checkpoint_path)
-    path_load = "/home/brain/alana/checkpoints"
+    path_load = "/home/brain/alana/checkpoints/brims_azul_baseline"
     path_save = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}'
-    type_model = "model"
+    type_model = "best_model"
 
     if not os.path.exists(path_save):
         os.makedirs(path_save)
@@ -606,7 +606,7 @@ if __name__ == "__main__":
     args, test_name = function_with_args_and_default_kwargs(sys.argv, **kwargs)
 
 
-    num_games = 8
+    num_games = 1
     num_envs = 1
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)

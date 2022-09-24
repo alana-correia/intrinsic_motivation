@@ -58,12 +58,6 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
 
         r = 0
         k = 0
-        dones_game = []
-        actions_game = []
-        lives_game = []
-        ex_reward_game = []
-        im_reward_game = []
-        total_reward_game = []
 
         while not done:
             with torch.no_grad():
@@ -83,65 +77,14 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
                 next_obs = torch.Tensor(next_obs).to(device)
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0:
-                    dones_game.append(done)
-                    actions_game.append(action.cpu().numpy()[-1])
-                    lives_game.append(info[-1]['lives'])
-                    ex_reward_game.append(reward[-1])
-                    im_reward_game.append(im_reward.data.cpu().numpy()[-1])
-                    total_reward_game.append(total_reward)
-
                 if idx == 0 or idx == 1:
                     path_img = os.path.join(path_save,f'imgs_video_{idx}')
                     if not os.path.exists(path_img):
                         os.makedirs(path_img)
                     matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
                     k += 1
-        if idx == 0:
-            fig_att = plt.gcf()
-            counts, bins = np.histogram(actions_game)
-            plt.hist(bins[:-1], bins, weights=counts)
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'histogram_actions_game0.pdf'), format='pdf')
-            plt.close()
 
-            plt.plot(ex_reward_game, 'b')
-            plt.plot(im_reward_game, 'r')
-            plt.plot(total_reward_game, 'g')
-            plt.legend(["Extrinsic Reward", "Intrinsic Reward", "Total Reward"], loc="best")
-            plt.xlabel('Step')
-            plt.show()
-
-            fig_att = plt.gcf()
-            plt.plot(actions_game, 'b')
-            plt.legend(["Actions"], loc="best")
-            plt.xlabel('Step')
-
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            actions_game = np.asarray(actions_game)
-            actions_game = np.where(actions_game == 1, 1, 0)
-            plt.plot(actions_game, 'b')
-            plt.plot(lives_game, 'r')
-            plt.plot(dones_game, 'g')
-            plt.legend(["Actions", "Lives", "Dones"], loc="best")
-            plt.xlabel('Step')
-
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_versus_lives_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(ex_reward_game, 'b')
-            plt.legend(["Extrinsic Reward", "Intrinsic Reward", "Total Reward"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'rewards_game0.pdf'), format='pdf')
-            plt.close()
-
+        envs.close()
         if idx == 0 or idx == 1:
             fps = 10
             print('\nstart video ...')
@@ -150,8 +93,8 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
             clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(image_files, fps=fps)
             clip.write_videofile(os.path.join(path_save, f"{test_name}_{run_name}_game{idx}.mp4"))
 
-        #scores.append(info[-1]['episode']['r'])
-        scores.append(r)
+        scores.append(info[-1]['episode']['r'])
+        #scores.append(r)
         rewards.append(r)
         lives.append(info[-1]['lives'])
         lenght.append(info[-1]['episode']['l'])
@@ -173,18 +116,6 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
     print(f'{test_name} results:')
     print(data_df)
 
-    plot = data_df['scores'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Score')
-    plot.get_figure().savefig(os.path.join(path_save, 'scores.pdf'), format='pdf')
-    plt.close()
-
-    plot = data_df['rewards'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Reward')
-    plot.get_figure().savefig(os.path.join(path_save, 'rewards.pdf'), format='pdf')
-    plt.close()
-
     df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
     data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
 
@@ -198,10 +129,6 @@ def test_II(args, agent, run_name, path_load, path_save, test_name, num_games, n
     times = []
     rewards = []
 
-    dones_game = []
-    actions_game = []
-    lives_game = []
-    ex_reward_game = []
 
     if not os.path.exists(path_save):
         os.makedirs(path_save)
@@ -232,8 +159,7 @@ def test_II(args, agent, run_name, path_load, path_save, test_name, num_games, n
         actions_game = []
         lives_game = []
         ex_reward_game = []
-        im_reward_game = []
-        total_reward_game = []
+
 
         while not done:
             with torch.no_grad():
@@ -257,54 +183,13 @@ def test_II(args, agent, run_name, path_load, path_save, test_name, num_games, n
 
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0:
-                    dones_game.append(done)
-                    actions_game.append(action.cpu().numpy()[-1])
-                    lives_game.append(info[-1]['lives'])
-                    ex_reward_game.append(reward[-1])
-
                 if idx == 0 or idx == 1:
                     path_img = os.path.join(path_save, f'imgs_video_{idx}')
                     if not os.path.exists(path_img):
                         os.makedirs(path_img)
                     matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
                     k += 1
-        if idx == 0:
-            fig_att = plt.gcf()
-            counts, bins = np.histogram(actions_game)
-            plt.hist(bins[:-1], bins, weights=counts)
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'histogram_actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(actions_game, 'b')
-            plt.legend(["Actions"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            actions_game = np.asarray(actions_game)
-            actions_game = np.where(actions_game == 1, 1, 0)
-            plt.plot(actions_game, 'b')
-            plt.plot(lives_game, 'r')
-            plt.plot(dones_game, 'g')
-            plt.legend(["Actions", "Lives", "Dones"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_versus_lives_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(ex_reward_game, 'b')
-            plt.legend(["Extrinsic Reward", "Intrinsic Reward", "Total Reward"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'rewards_game0.pdf'), format='pdf')
-            plt.close()
-
+        envs.close()
         if idx == 0 or idx == 1:
             fps = 10
             print('\nstart video ...')
@@ -337,17 +222,6 @@ def test_II(args, agent, run_name, path_load, path_save, test_name, num_games, n
     print(f'{test_name} results:')
     print(data_df)
 
-    plot = data_df['scores'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Score')
-    plot.get_figure().savefig(os.path.join(path_save, 'scores.pdf'), format='pdf')
-    plt.close()
-
-    plot = data_df['rewards'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Reward')
-    plot.get_figure().savefig(os.path.join(path_save, 'rewards.pdf'), format='pdf')
-    plt.close()
 
     df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
     data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
@@ -394,8 +268,7 @@ def test_III(args, agent, run_name, path_load, path_save, test_name, mode, num_g
         actions_game = []
         lives_game = []
         ex_reward_game = []
-        im_reward_game = []
-        total_reward_game = []
+
 
         while not done:
             with torch.no_grad():
@@ -417,54 +290,13 @@ def test_III(args, agent, run_name, path_load, path_save, test_name, mode, num_g
 
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0:
-                    dones_game.append(done)
-                    actions_game.append(action.cpu().numpy()[-1])
-                    lives_game.append(info[-1]['lives'])
-                    ex_reward_game.append(reward[-1])
-
                 if idx == 0 or idx == 1:
                     path_img = os.path.join(path_save, f'imgs_video_{idx}')
                     if not os.path.exists(path_img):
                         os.makedirs(path_img)
                     matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
                     k += 1
-        if idx == 0:
-            fig_att = plt.gcf()
-            counts, bins = np.histogram(actions_game)
-            plt.hist(bins[:-1], bins, weights=counts)
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'histogram_actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(actions_game, 'b')
-            plt.legend(["Actions"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            actions_game = np.asarray(actions_game)
-            actions_game = np.where(actions_game == 1, 1, 0)
-            plt.plot(actions_game, 'b')
-            plt.plot(lives_game, 'r')
-            plt.plot(dones_game, 'g')
-            plt.legend(["Actions", "Lives", "Dones"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_versus_lives_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(ex_reward_game, 'b')
-            plt.legend(["Extrinsic Reward", "Intrinsic Reward", "Total Reward"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'rewards_game0.pdf'), format='pdf')
-            plt.close()
-
+        envs.close()
         if idx == 0 or idx == 1:
             fps = 10
             print('\nstart video ...')
@@ -496,18 +328,6 @@ def test_III(args, agent, run_name, path_load, path_save, test_name, mode, num_g
     print(df_stats)
     print(f'{test_name} results:')
     print(data_df)
-
-    plot = data_df['scores'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Score')
-    plot.get_figure().savefig(os.path.join(path_save, 'scores.pdf'), format='pdf')
-    plt.close()
-
-    plot = data_df['rewards'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Reward')
-    plot.get_figure().savefig(os.path.join(path_save, 'rewards.pdf'), format='pdf')
-    plt.close()
 
     df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
     data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
@@ -552,8 +372,7 @@ def test_IV(args, agent, run_name, path_load, path_save, test_name, mode, diffic
         actions_game = []
         lives_game = []
         ex_reward_game = []
-        im_reward_game = []
-        total_reward_game = []
+
 
         while not done:
             with torch.no_grad():
@@ -575,54 +394,13 @@ def test_IV(args, agent, run_name, path_load, path_save, test_name, mode, diffic
 
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0:
-                    dones_game.append(done)
-                    actions_game.append(action.cpu().numpy()[-1])
-                    lives_game.append(info[-1]['lives'])
-                    ex_reward_game.append(reward[-1])
-
                 if idx == 0 or idx == 1:
                     path_img = os.path.join(path_save, f'imgs_video_{idx}')
                     if not os.path.exists(path_img):
                         os.makedirs(path_img)
                     matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
                     k += 1
-        if idx == 0:
-            fig_att = plt.gcf()
-            counts, bins = np.histogram(actions_game)
-            plt.hist(bins[:-1], bins, weights=counts)
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'histogram_actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(actions_game, 'b')
-            plt.legend(["Actions"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            actions_game = np.asarray(actions_game)
-            actions_game = np.where(actions_game == 1, 1, 0)
-            plt.plot(actions_game, 'b')
-            plt.plot(lives_game, 'r')
-            plt.plot(dones_game, 'g')
-            plt.legend(["Actions", "Lives", "Dones"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_versus_lives_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(ex_reward_game, 'b')
-            plt.legend(["Extrinsic Reward", "Intrinsic Reward", "Total Reward"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'rewards_game0.pdf'), format='pdf')
-            plt.close()
-
+        envs.close()
         if idx == 0 or idx == 1:
             fps = 10
             print('\nstart video ...')
@@ -655,17 +433,6 @@ def test_IV(args, agent, run_name, path_load, path_save, test_name, mode, diffic
     print(f'{test_name} results:')
     print(data_df)
 
-    plot = data_df['scores'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Score')
-    plot.get_figure().savefig(os.path.join(path_save, 'scores.pdf'), format='pdf')
-    plt.close()
-
-    plot = data_df['rewards'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Reward')
-    plot.get_figure().savefig(os.path.join(path_save, 'rewards.pdf'), format='pdf')
-    plt.close()
 
     df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
     data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
@@ -711,8 +478,6 @@ def test_V(args, agent, run_name, path_load, path_save, test_name, skip_frames, 
         actions_game = []
         lives_game = []
         ex_reward_game = []
-        im_reward_game = []
-        total_reward_game = []
 
         while not done:
             with torch.no_grad():
@@ -734,54 +499,13 @@ def test_V(args, agent, run_name, path_load, path_save, test_name, skip_frames, 
 
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0:
-                    dones_game.append(done)
-                    actions_game.append(action.cpu().numpy()[-1])
-                    lives_game.append(info[-1]['lives'])
-                    ex_reward_game.append(reward[-1])
-
                 if idx == 0 or idx == 1:
                     path_img = os.path.join(path_save, f'imgs_video_{idx}')
                     if not os.path.exists(path_img):
                         os.makedirs(path_img)
                     matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
                     k += 1
-        if idx == 0:
-            fig_att = plt.gcf()
-            counts, bins = np.histogram(actions_game)
-            plt.hist(bins[:-1], bins, weights=counts)
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'histogram_actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(actions_game, 'b')
-            plt.legend(["Actions"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            actions_game = np.asarray(actions_game)
-            actions_game = np.where(actions_game == 1, 1, 0)
-            plt.plot(actions_game, 'b')
-            plt.plot(lives_game, 'r')
-            plt.plot(dones_game, 'g')
-            plt.legend(["Actions", "Lives", "Dones"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_versus_lives_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(ex_reward_game, 'b')
-            plt.legend(["Extrinsic Reward", "Intrinsic Reward", "Total Reward"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'rewards_game0.pdf'), format='pdf')
-            plt.close()
-
+        envs.close()
         if idx == 0 or idx == 1:
             fps = 10
             print('\nstart video ...')
@@ -813,19 +537,6 @@ def test_V(args, agent, run_name, path_load, path_save, test_name, skip_frames, 
     print(df_stats)
     print(f'{test_name} results:')
     print(data_df)
-
-    plot = data_df['scores'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Score')
-    plt.draw()
-    plot.get_figure().savefig(os.path.join(path_save, 'scores.pdf'), format='pdf')
-    plt.close()
-
-    plot = data_df['rewards'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Reward')
-    plot.get_figure().savefig(os.path.join(path_save, 'rewards.pdf'), format='pdf')
-    plt.close()
 
     df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
     data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
@@ -869,8 +580,7 @@ def test_VI(args, agent, run_name, path_load, path_save, test_name, wd, num_game
         actions_game = []
         lives_game = []
         ex_reward_game = []
-        im_reward_game = []
-        total_reward_game = []
+
 
         while not done:
             with torch.no_grad():
@@ -892,11 +602,6 @@ def test_VI(args, agent, run_name, path_load, path_save, test_name, wd, num_game
 
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0:
-                    dones_game.append(done)
-                    actions_game.append(action.cpu().numpy()[-1])
-                    lives_game.append(info[-1]['lives'])
-                    ex_reward_game.append(reward[-1])
 
                 if idx == 0 or idx == 1:
                     path_img = os.path.join(path_save, f'imgs_video_{idx}')
@@ -904,42 +609,7 @@ def test_VI(args, agent, run_name, path_load, path_save, test_name, wd, num_game
                         os.makedirs(path_img)
                     matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
                     k += 1
-        if idx == 0:
-            fig_att = plt.gcf()
-            counts, bins = np.histogram(actions_game)
-            plt.hist(bins[:-1], bins, weights=counts)
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'histogram_actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(actions_game, 'b')
-            plt.legend(["Actions"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            actions_game = np.asarray(actions_game)
-            actions_game = np.where(actions_game == 1, 1, 0)
-            plt.plot(actions_game, 'b')
-            plt.plot(lives_game, 'r')
-            plt.plot(dones_game, 'g')
-            plt.legend(["Actions", "Lives", "Dones"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'actions_versus_lives_game0.pdf'), format='pdf')
-            plt.close()
-
-            fig_att = plt.gcf()
-            plt.plot(ex_reward_game, 'b')
-            plt.legend(["Extrinsic Reward", "Intrinsic Reward", "Total Reward"], loc="best")
-            plt.xlabel('Step')
-            plt.draw()
-            fig_att.savefig(os.path.join(path_save, 'rewards_game0.pdf'), format='pdf')
-            plt.close()
-
+        envs.close()
         if idx == 0 or idx == 1:
             fps = 10
             print('\nstart video ...')
@@ -972,18 +642,6 @@ def test_VI(args, agent, run_name, path_load, path_save, test_name, wd, num_game
     print(f'{test_name} results:')
     print(data_df)
 
-    plot = data_df['scores'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Score')
-    plot.get_figure().savefig(os.path.join(path_save, 'scores.pdf'), format='pdf')
-    plt.close()
-
-    plot = data_df['rewards'].plot.line()
-    plt.xlabel('Game')
-    plt.ylabel('Reward')
-    plot.get_figure().savefig(os.path.join(path_save, 'rewards.pdf'), format='pdf')
-    plt.close()
-
     df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
     data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
 
@@ -998,18 +656,18 @@ def function_with_args_and_default_kwargs(unk, **kwargs):
         parser.add_argument('--' + k, default=v)
     #args = parser.parse_args(optional_args)
     args, unknown = parser.parse_known_args(unk)
-    #test_name = unknown[1]
-    test_name = "test_I"
+    test_name = unknown[1]
+    #test_name = "test_I"
     return args, test_name
 
 if __name__ == "__main__":
     #args = parse_args()
     run_name = "BreakoutNoFrameskip-v4__cnn_brims_mlp_mlp_hibrid_reward__1__1658017900"
-    checkpoint_path = os.path.join("/home/brain/alana/checkpoints/final_checkpoints", f"{run_name}_args.json")
+    checkpoint_path = os.path.join("/home/brain/alana/checkpoints/intrinsic_results", f"{run_name}_args.json")
     print(checkpoint_path)
-    path_load = "/home/brain/alana/checkpoints/final_checkpoints"
+    path_load = "/home/brain/alana/checkpoints/intrinsic_results"
     path_save = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}'
-    type_model = "model"
+    type_model = "best_model"
 
     if not os.path.exists(path_save):
         os.makedirs(path_save)
@@ -1033,19 +691,10 @@ if __name__ == "__main__":
 
     if test_name == "test_I":
         test_I(args, agent, run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
-    elif test_name == "test_II_v1":
+    elif test_name == "test_II":
     # cenário de teste II - ambiente de teste do agente com estilo diferente
         test_II(args, agent, run_name, path_load, os.path.join(path_save, "test_II_v1"), "test_II_v1", num_games, num_envs, type_model,
                      device, 10.0)
-    elif test_name == "test_II_v2":
-        test_II(args, agent, run_name, path_load, os.path.join(path_save, "test_II_v2"), "test_II_v2", num_games,
-                       num_envs, type_model,
-                       device, 30.0)
-    elif test_name == "test_II_v3":
-        test_II(args, agent, run_name, path_load, os.path.join(path_save, "test_II_v3"), "test_II_v3", num_games,
-                       num_envs, type_model,
-                       device, 50.0)
-
     elif test_name == "test_III":
     # cenário de teste III - ambiente de teste do agente mais difícil
         test_III(args, agent, run_name, path_load, os.path.join(path_save, "test_III"), "test_III", 4, num_games,
