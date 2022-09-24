@@ -366,7 +366,7 @@ if __name__ == "__main__":
 
             for id, item in enumerate(info):
                 if "episode" in item.keys():
-                    print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}, lives={item['lives']}")
+                    print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
                     avg_returns.append(item['episode']['r'])
 
                     wandb.log({
