@@ -363,19 +363,26 @@ if __name__ == "__main__":
             rewards[step] = im_reward
             rewards_ex[step] = torch.tensor(ex_reward).to(device)
             next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
-
+            rewards_episode = []
+            len_episodes = []
             for id, item in enumerate(info):
                 if "episode" in item.keys():
-                    print(f"update={update}/total_updates={num_updates}, global_step={global_step}, episodic_return={item['episode']['r']}")
-                    avg_returns.append(item['episode']['r'])
 
-                    wandb.log({
-                        "charts/average_20_last_score_episodes": np.average(avg_returns),
-                        "charts/episodic_return": item["episode"]["r"],
-                        "charts/intrinsic_reward": im_reward[id].item(),
-                        "charts/episodic_length": item["episode"]["l"]
-                    }, step=global_step)
-                    break
+                    #avg_returns.append(item['episode']['r'])
+
+                    rewards_episode.append(item['episode']['r'])
+                    len_episodes.append(item["episode"]["l"])
+
+            if rewards_episode:
+                print(f"update={update}/total_updates={num_updates}, global_step={global_step}, mean_episodic_return={np.mean(rewards_episode)} std - {np.std(rewards_episode)}")
+                wandb.log({
+                    "charts/mean_episodic_return": np.mean(rewards_episode),
+                    "charts/min_episodic_return": np.mean(rewards_episode) - np.std(rewards_episode),
+                    "charts/max_episodic_return": np.mean(rewards_episode) + np.std(rewards_episode),
+                    "charts/mean_episodic_length": np.mean(len_episodes),
+                    "charts/min_episodic_length": np.mean(len_episodes) - np.std(len_episodes),
+                    "charts/max_episodic_length": np.mean(len_episodes) + np.std(len_episodes)
+                }, step=global_step)
         # bootstrap value if not done
         with torch.no_grad():
             next_value = agent.get_value(next_obs, next_lstm_state_p).reshape(1, -1)
