@@ -121,12 +121,12 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
             if idx == 0:
                 env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
         #if split == 'train':
-        #env = NoopResetEnv(env, noop_max=30)
+        env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
         if split == 'train':
             env = EpisodicLifeEnv(env)
-        #if "FIRE" in env.unwrapped.get_action_meanings():
-        #    env = FireResetEnv(env)
+        if "FIRE" in env.unwrapped.get_action_meanings():
+            env = FireResetEnv(env)
         env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)

@@ -109,11 +109,14 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
     def thunk():
         env = gym.make(gym_id, mode=mode, difficulty=difficulty)
         env = gym.wrappers.RecordEpisodeStatistics(env)
+        if capture_video:
+            if idx == 0:
+                env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
         #if split == 'train':
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
         #if split == 'train':
-        env = EpisodicLifeEnv(env)
+        #env = EpisodicLifeEnv(env)
         if "FIRE" in env.unwrapped.get_action_meanings():
             env = FireResetEnv(env)
         env = ClipRewardEnv(env)
@@ -123,6 +126,7 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
+        return env
 
     return thunk
 
