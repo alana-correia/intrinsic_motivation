@@ -113,7 +113,7 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
         #if split == 'train':
-        #env = EpisodicLifeEnv(env)
+        env = EpisodicLifeEnv(env)
         if "FIRE" in env.unwrapped.get_action_meanings():
             env = FireResetEnv(env)
         env = ClipRewardEnv(env)
