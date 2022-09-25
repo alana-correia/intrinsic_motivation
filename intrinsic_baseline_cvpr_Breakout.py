@@ -16,9 +16,12 @@ import json
 import torch.nn.functional as F
 
 from stable_baselines3.common.atari_wrappers import (  # isort:skip
-    MaxAndSkipEnv
+    ClipRewardEnv,
+    EpisodicLifeEnv,
+    FireResetEnv,
+    MaxAndSkipEnv,
+    NoopResetEnv,
 )
-
 
 def parse_args():
     # fmt: off
@@ -105,15 +108,21 @@ def parse_args():
 def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, difficulty=0, skip=4, split='train'):
     def thunk():
         env = gym.make(gym_id, mode=mode, difficulty=difficulty)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+        #if split == 'train':
+        env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
+        #if split == 'train':
+        #env = EpisodicLifeEnv(env)
+        if "FIRE" in env.unwrapped.get_action_meanings():
+            env = FireResetEnv(env)
+        env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, frame_stack)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
-        return env
 
     return thunk
 
