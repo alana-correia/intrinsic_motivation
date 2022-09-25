@@ -30,7 +30,7 @@ def parse_args():
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
-    parser.add_argument("--gym-id", type=str, default="MsPacman-v5",
+    parser.add_argument("--gym-id", type=str, default="MsPacman-v4",
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=1e-4,
         help="the learning rate of the optimizer")
@@ -107,7 +107,7 @@ def parse_args():
 
 def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, difficulty=0, skip=4, split='train'):
     def thunk():
-        env = gym.make(f"ALE/{gym_id}", mode=mode, difficulty=difficulty, full_action_space=False)
+        env = gym.make(gym_id, mode=mode, difficulty=difficulty, full_action_space=False)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
