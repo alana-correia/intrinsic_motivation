@@ -30,7 +30,7 @@ def parse_args():
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
-    parser.add_argument("--gym-id", type=str, default="MsPacman-v4",
+    parser.add_argument("--gym-id", type=str, default="Riverraid-v4",
         help="the id of the gym environment")
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
@@ -119,7 +119,7 @@ def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, di
         #env = EpisodicLifeEnv(env)
         #if "FIRE" in env.unwrapped.get_action_meanings():
             #env = FireResetEnv(env)
-        env = ClipRewardEnv(env)
+        #env = ClipRewardEnv(env)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, frame_stack)
@@ -166,7 +166,7 @@ class AgentCuriosity(nn.Module):
         )
         self.brims_p = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
         self.brims_f = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
-        self.actor = layer_init(nn.Linear(self.nhid[-1], 9), std=0.01)
+        self.actor = layer_init(nn.Linear(self.nhid[-1], 18), std=0.01)
         self.critic = layer_init(nn.Linear(self.nhid[-1], 1), std=1)
 
     def init_hidden_p(self, bsz):
@@ -313,7 +313,7 @@ if __name__ == "__main__":
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-
+    print(envs.single_action_space)
 
 
     run = wandb.init(project=args.wandb_project_name,

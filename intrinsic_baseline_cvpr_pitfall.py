@@ -32,7 +32,7 @@ def parse_args():
                         help="experiment name")
     parser.add_argument("--gym-id", type=str, default="Pitfall-v4",
         help="the id of the gym environment")
-    parser.add_argument("--learning-rate", type=float, default=1e-4,
+    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
@@ -107,7 +107,7 @@ def parse_args():
 
 def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, difficulty=0, skip=4, split='train'):
     def thunk():
-        env = gym.make(gym_id, mode=mode, difficulty=difficulty, full_action_space=False)
+        env = gym.make(gym_id, mode=mode, difficulty=difficulty)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         if capture_video:
             if idx == 0:
@@ -313,7 +313,7 @@ if __name__ == "__main__":
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-
+    print(envs.single_action_space)
 
 
     run = wandb.init(project=args.wandb_project_name,
