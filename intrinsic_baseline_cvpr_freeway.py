@@ -298,8 +298,8 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    #if args.device_num >= 0:
-        #torch.cuda.set_device(args.device_num)
+    if args.device_num >= 0:
+        torch.cuda.set_device(args.device_num)
 
     # Additional Info when using cuda
     if device.type == 'cuda':
