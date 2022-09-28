@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.categorical import Categorical
+from gym.wrappers import TimeLimit
 from brims.blocks import Blocks
 import wandb
 import json
@@ -32,7 +33,7 @@ def parse_args():
                         help="experiment name")
     parser.add_argument("--gym-id", type=str, default="BreakoutNoFrameskip-v4",
         help="the id of the gym environment")
-    parser.add_argument("--learning-rate", type=float, default=1e-4,
+    parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
@@ -66,7 +67,7 @@ def parse_args():
     parser.add_argument("--blocked_grad", type=bool, default=True)
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=16,
+    parser.add_argument("--num-envs", type=int, default=128,
         help="the number of parallel game environments")
     parser.add_argument("--device_num", type=int, default=0,
                         help="the number of parallel game environments")
@@ -80,7 +81,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches", type=int, default=8,
+    parser.add_argument("--num-minibatches", type=int, default=16,
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
@@ -108,21 +109,14 @@ def parse_args():
 def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, difficulty=0, skip=4, split='train'):
     def thunk():
         env = gym.make(gym_id, mode=mode, difficulty=difficulty)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        if capture_video:
-            if idx == 0:
-                env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
-        #if split == 'train':
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
-        #if split == 'train':
-        #env = EpisodicLifeEnv(env)
-        if "FIRE" in env.unwrapped.get_action_meanings():
-            env = FireResetEnv(env)
-        env = ClipRewardEnv(env)
+        env = TimeLimit(env, max_episode_steps=4500)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, frame_stack)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)

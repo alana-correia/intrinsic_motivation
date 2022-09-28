@@ -5,6 +5,7 @@ import time
 from distutils.util import strtobool
 from collections import deque
 import gym
+from gym.wrappers import TimeLimit
 import numpy as np
 import torch
 import torch.nn as nn
@@ -38,7 +39,7 @@ def parse_args():
         help="seed of the experiment")
     parser.add_argument("--frame_stack", type=int, default=4,
                         help="frame stack num")
-    parser.add_argument("--total-timesteps", type=int, default=210000000,
+    parser.add_argument("--total-timesteps", type=int, default=200000000,
         help="total timesteps of the experiments")
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
@@ -66,7 +67,7 @@ def parse_args():
     parser.add_argument("--blocked_grad", type=bool, default=True)
 
     # Algorithm specific arguments
-    parser.add_argument("--num-envs", type=int, default=16,
+    parser.add_argument("--num-envs", type=int, default=128,
         help="the number of parallel game environments")
     parser.add_argument("--device_num", type=int, default=0,
                         help="the number of parallel game environments")
@@ -80,7 +81,7 @@ def parse_args():
         help="the discount factor gamma")
     parser.add_argument("--gae-lambda", type=float, default=0.95,
         help="the lambda for the general advantage estimation")
-    parser.add_argument("--num-minibatches", type=int, default=8,
+    parser.add_argument("--num-minibatches", type=int, default=16,
         help="the number of mini-batches")
     parser.add_argument("--update-epochs", type=int, default=4,
         help="the K epochs to update the policy")
@@ -107,22 +108,15 @@ def parse_args():
 
 def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, difficulty=0, skip=4, split='train'):
     def thunk():
-        env = gym.make(gym_id, mode=mode, difficulty=difficulty, full_action_space=False)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        if capture_video:
-            if idx == 0:
-                env = gym.wrappers.RecordVideo(env, f"videos/{split}_{run_name}.mp4")
-        #if split == 'train':
+        env = gym.make(gym_id, mode=mode, difficulty=difficulty)
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
-        #if split == 'train':
-        #env = EpisodicLifeEnv(env)
-        #if "FIRE" in env.unwrapped.get_action_meanings():
-            #env = FireResetEnv(env)
-        #env = ClipRewardEnv(env)
+        env = TimeLimit(env, max_episode_steps=4500)
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayScaleObservation(env)
         env = gym.wrappers.FrameStack(env, frame_stack)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+
         env.seed(seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
@@ -313,7 +307,6 @@ if __name__ == "__main__":
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    print(envs.single_action_space)
 
 
     run = wandb.init(project=args.wandb_project_name,
@@ -381,6 +374,7 @@ if __name__ == "__main__":
             rewards_episode = []
             len_episodes = []
             for id, item in enumerate(info):
+                #print(item)
                 if "episode" in item.keys():
 
                     #avg_returns.append(item['episode']['r'])
@@ -388,8 +382,11 @@ if __name__ == "__main__":
                     rewards_episode.append(item['episode']['r'])
                     len_episodes.append(item["episode"]["l"])
 
+            #print(f'len episodes: {len_episodes}')
+            #print(f'rewards: {rewards_episode}')
             if rewards_episode:
                 print(f"update={update}/total_updates={num_updates}, global_step={global_step}, mean_episodic_return={np.mean(rewards_episode)} std - {np.std(rewards_episode)}")
+
                 wandb.log({
                     "charts/mean_episodic_return": np.mean(rewards_episode),
                     "charts/min_episodic_return": np.mean(rewards_episode) - np.std(rewards_episode),
@@ -446,6 +443,7 @@ if __name__ == "__main__":
             print(f'max_rewards: {max_rewards} | b_rewards: {b_rewards.item()}')
             max_rewards = b_rewards.item()
             #print(max_rewards)
+
             wandb.log({
                 "charts/max_rewards": max_rewards
             }, step=global_step)
