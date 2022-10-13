@@ -308,7 +308,7 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     print(envs.single_action_space)
-    exit()
+
 
     run = wandb.init(project=args.wandb_project_name,
                      entity=args.wandb_entity,
