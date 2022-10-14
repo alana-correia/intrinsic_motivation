@@ -70,7 +70,7 @@ def parse_args():
     parser.add_argument("--num-envs", type=int, default=128,
         help="the number of parallel game environments")
     parser.add_argument("--device_num", type=int, default=0,
-                        help="the number of parallel game environments")
+                        help="device num")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
     parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
@@ -293,7 +293,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     #if args.device_num >= 0:
-    torch.cuda.set_device(1)
+    torch.cuda.set_device(args.device_num)
 
     # Additional Info when using cuda
     if device.type == 'cuda':
