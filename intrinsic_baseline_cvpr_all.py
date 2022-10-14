@@ -110,7 +110,7 @@ def parse_args():
 
 def make_env(gym_id, seed, frame_stack, full_space_actions, mode=0, difficulty=0, skip=4):
     def thunk():
-        env = gym.make(gym_id, full_space_actions=full_space_actions, mode=mode, difficulty=difficulty)
+        env = gym.make(gym_id, full_action_space=full_space_actions, mode=mode, difficulty=difficulty)
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
         env = TimeLimit(env, max_episode_steps=4500)
