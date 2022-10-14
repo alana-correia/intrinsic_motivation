@@ -247,7 +247,7 @@ if __name__ == "__main__":
 
         json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
 
-        device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+        device = torch.device(f"cuda:{args.device_num}" if torch.cuda.is_available() and args.cuda else "cpu")
         agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
                                args.topk,
                                args.use_inactive, args.blocked_grad).to(device)
