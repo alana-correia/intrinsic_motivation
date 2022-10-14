@@ -33,7 +33,7 @@ def parse_args():
                         help="experiment name")
     parser.add_argument("--gym-id", type=str, default="Asteroids-v4",
         help="the id of the gym environment")
-    parser.add_argument("--num-actions", type=int, default=14)
+    parser.add_argument("--num-actions", type=int, default=18)
     parser.add_argument("--full-space-actions", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True)
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
