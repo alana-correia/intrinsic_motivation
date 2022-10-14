@@ -31,8 +31,9 @@ def parse_args():
         help="the name of this experiment")
     parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
-    parser.add_argument("--gym-id", type=str, default="Enduro-v4",
+    parser.add_argument("--gym-id", type=str, default="Asteroids-v4",
         help="the id of the gym environment")
+    parser.add_argument("--num-actions", type=int, default=14)
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
@@ -132,7 +133,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class AgentCuriosity(nn.Module):
-    def __init__(self, framestack, ninp=512, nhid=[512], nlayers=1, dropout=0.5, num_blocks=[4], topk=[2], use_inactive=False, blocked_grad=False):
+    def __init__(self, num_actions, framestack, ninp=512, nhid=[512], nlayers=1, dropout=0.5, num_blocks=[4], topk=[2], use_inactive=False, blocked_grad=False):
         super(AgentCuriosity, self).__init__()
 
         self.nhid = nhid
@@ -160,7 +161,7 @@ class AgentCuriosity(nn.Module):
         )
         self.brims_p = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
         self.brims_f = Blocks(ninp, nhid, nlayers, num_blocks, topk, use_inactive, blocked_grad)
-        self.actor = layer_init(nn.Linear(self.nhid[-1], 18), std=0.01)
+        self.actor = layer_init(nn.Linear(self.nhid[-1], num_actions), std=0.01)
         self.critic = layer_init(nn.Linear(self.nhid[-1], 1), std=1)
 
     def init_hidden_p(self, bsz):
@@ -247,8 +248,8 @@ if __name__ == "__main__":
 
         json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
 
-        device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-        agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
+        device = torch.device(f"cuda:{args.device_num}" if torch.cuda.is_available() and args.cuda else "cpu")
+        agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
                                args.topk,
                                args.use_inactive, args.blocked_grad).to(device)
 
@@ -270,7 +271,7 @@ if __name__ == "__main__":
         args = function_with_args_and_default_kwargs(**args)
         args.run_name = run_name
         device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-        agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
+        agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
                                args.topk,
                                args.use_inactive, args.blocked_grad).to(device)
 
@@ -308,7 +309,7 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     print(envs.single_action_space)
-    #exit()
+
 
     run = wandb.init(project=args.wandb_project_name,
                      entity=args.wandb_entity,
