@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument("--gym-id", type=str, default="Asteroids-v4",
         help="the id of the gym environment")
     parser.add_argument("--num-actions", type=int, default=14)
+    parser.add_argument("--full-space-actions", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True)
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
     parser.add_argument("--seed", type=int, default=1,
@@ -107,9 +108,9 @@ def parse_args():
     return args
 
 
-def make_env(gym_id, seed, idx, frame_stack, capture_video, run_name, mode=0, difficulty=0, skip=4, split='train'):
+def make_env(gym_id, seed, frame_stack, full_space_actions, mode=0, difficulty=0, skip=4):
     def thunk():
-        env = gym.make(gym_id, mode=mode, difficulty=difficulty)
+        env = gym.make(gym_id, full_space_actions=full_space_actions, mode=mode, difficulty=difficulty)
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=skip)
         env = TimeLimit(env, max_episode_steps=4500)
@@ -302,8 +303,9 @@ if __name__ == "__main__":
     else:
         print("CUDA is not used")
     # env setup
+
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, i, args.frame_stack, args.capture_video, run_name) for i in
+        [make_env(args.gym_id, args.seed + i, args.frame_stack, args.full_space_actions) for i in
          range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
