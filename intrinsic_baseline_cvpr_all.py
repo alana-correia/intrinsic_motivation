@@ -71,7 +71,7 @@ def parse_args():
     # Algorithm specific arguments
     parser.add_argument("--num-envs", type=int, default=128,
         help="the number of parallel game environments")
-    parser.add_argument("--device_num", type=int, default=0,
+    parser.add_argument("--device-num", type=int, default=0,
                         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")
