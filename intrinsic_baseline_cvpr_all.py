@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument("--gym-id", type=str, default="Asteroids-v4",
         help="the id of the gym environment")
     parser.add_argument("--num-actions", type=int, default=18)
+    parser.add_argument("--mode", type=int, default=0)
     parser.add_argument("--full-space-actions", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True)
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
@@ -305,7 +306,7 @@ if __name__ == "__main__":
     # env setup
 
     envs = gym.vector.SyncVectorEnv(
-        [make_env(args.gym_id, args.seed + i, args.frame_stack, args.full_space_actions) for i in
+        [make_env(args.gym_id, args.seed + i, args.frame_stack, args.full_space_actions, mode=args.mode) for i in
          range(args.num_envs)]
     )
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
