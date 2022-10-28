@@ -29,7 +29,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp-name", type=str, default="my_baseline_intrinsic",
         help="the name of this experiment")
-    parser.add_argument("--run-name", type=str, default=None,
+    parser.add_argument("--run_name", type=str, default=None,
                         help="experiment name")
     parser.add_argument("--gym-id", type=str, default="Asteroids-v4",
         help="the id of the gym environment")
