@@ -285,7 +285,8 @@ if __name__ == "__main__":
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         update_init = checkpoint['update']
         global_step = checkpoint['global_step']
-        max_rewards = checkpoint['max_rewards']
+        #max_rewards = checkpoint['max_rewards']
+        max_rewards = 0.0
         print(f'load model OK ... update_init {update_init} | global_step {global_step}')
 
 
@@ -563,6 +564,7 @@ if __name__ == "__main__":
         torch.save({'update': update,
                     'global_step': global_step,
                     'epoch': epoch,
+                    'max_rewards': max_rewards,
                     'model_state_dict': agent.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.item()}, os.path.join(checkpoint_path, f"{run_name}_model.pth"))
