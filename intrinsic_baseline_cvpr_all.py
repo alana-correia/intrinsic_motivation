@@ -235,6 +235,8 @@ def function_with_args_and_default_kwargs(optional_args=None, **kwargs):
         parser.add_argument('--' + k, default=v)
     #args, unknown = parser.parse_args(optional_args)
     args, unknown = parser.parse_known_args(optional_args)
+
+    print('argumentos desconhecidos')
     print(unknown)
     return args
 
