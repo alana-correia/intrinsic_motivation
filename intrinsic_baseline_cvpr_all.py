@@ -269,6 +269,15 @@ if __name__ == "__main__":
 
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
+        run = wandb.init(project=args.wandb_project_name,
+                         entity=args.wandb_entity,
+                         config=vars(args),
+                         name=run_name,
+                         monitor_gym=True,
+                         save_code=True,
+                         id=run_name,
+                         resume=True)
+
         print(f'loading model ... {args.run_name}')
         wandb.restore(os.path.join(checkpoint_path, f"{run_name}_model.pth"))
         checkpoint = torch.load(os.path.join(checkpoint_path, f"{args.run_name}_model.pth"))
@@ -293,6 +302,15 @@ if __name__ == "__main__":
                                args.num_blocks,
                                args.topk,
                                args.use_inactive, args.blocked_grad).to(device)
+
+        run = wandb.init(project=args.wandb_project_name,
+                         entity=args.wandb_entity,
+                         config=vars(args),
+                         name=run_name,
+                         monitor_gym=True,
+                         save_code=True,
+                         id=run_name,
+                         resume=True)
 
         optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -328,14 +346,7 @@ if __name__ == "__main__":
     print(envs.single_action_space)
 
 
-    run = wandb.init(project=args.wandb_project_name,
-                     entity=args.wandb_entity,
-                     config=vars(args),
-                     name=run_name,
-                     monitor_gym=True,
-                     save_code=True,
-                     id=run_name,
-                     resume=True)
+
 
     total_params = sum(p.numel() for p in agent.parameters() if p.requires_grad)
     print("Model Built with Total Number of Trainable Parameters: " + str(total_params))
