@@ -253,6 +253,8 @@ if __name__ == "__main__":
         args.run_name = run_name
         args.device_num = device_num
 
+        print(args)
+
         json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
 
         device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
