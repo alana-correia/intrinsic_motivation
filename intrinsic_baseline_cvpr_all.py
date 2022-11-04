@@ -266,12 +266,14 @@ if __name__ == "__main__":
     # load model
     else:
         run_name = args.run_name
+        device_num = args.device_num
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
         f = open(os.path.join(checkpoint_path, f"{args.run_name}_args.json"), "r")
         args = json.loads(f.read())
 
         args = function_with_args_and_default_kwargs(**args)
         args.run_name = run_name
+        args.device_num = device_num
         device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
         agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
                                args.topk,
