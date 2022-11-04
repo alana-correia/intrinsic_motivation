@@ -271,6 +271,9 @@ if __name__ == "__main__":
         f = open(os.path.join(checkpoint_path, f"{args.run_name}_args.json"), "r")
         args = json.loads(f.read())
 
+        print(args)
+
+        exit()
         args = function_with_args_and_default_kwargs(**args)
         args.run_name = run_name
         args.device_num = device_num
