@@ -52,7 +52,7 @@ def parse_args():
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="Atari_CVPR_Experiments",
         help="the wandb's project name")
-    parser.add_argument("--load_model", type=bool, default=False)
+    parser.add_argument("--load-model", type=bool, default=False)
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
     parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
@@ -242,29 +242,7 @@ if __name__ == "__main__":
     args = parse_args()
     # new model
     print(args.run_name)
-    if args.run_name is None:
-        run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
-        checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
-        if not os.path.exists(checkpoint_path):
-            os.makedirs(checkpoint_path)
-
-        json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
-
-        device = torch.device(f"cuda:{args.device_num}" if torch.cuda.is_available() and args.cuda else "cpu")
-        agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
-                               args.topk,
-                               args.use_inactive, args.blocked_grad).to(device)
-
-        optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
-
-        print(f'new model ... {run_name}')
-        update_init = 1
-        global_step = 0
-        args.run_name = run_name
-        max_rewards = 0.0
-
-    # load model
-    else:
+    if args.load_model:
         run_name = args.run_name
         device_num = args.device_num
         checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
@@ -275,11 +253,11 @@ if __name__ == "__main__":
         args.run_name = run_name
         args.device_num = device_num
 
-        print(args.run_name)
-        print(args.device_num)
-        exit()
+        json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
+
         device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-        agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
+        agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout,
+                               args.num_blocks,
                                args.topk,
                                args.use_inactive, args.blocked_grad).to(device)
 
@@ -294,6 +272,30 @@ if __name__ == "__main__":
         global_step = checkpoint['global_step']
         max_rewards = checkpoint['max_rewards']
         print(f'load model OK ... update_init {update_init} | global_step {global_step}')
+
+
+    else:
+        run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+        checkpoint_path = os.path.join(os.getcwd(), "checkpoints")
+        if not os.path.exists(checkpoint_path):
+            os.makedirs(checkpoint_path)
+
+        json.dump(vars(args), open(os.path.join(checkpoint_path, f"{run_name}_args.json"), 'w'))
+
+        device = torch.device(f"cuda:{args.device_num}" if torch.cuda.is_available() and args.cuda else "cpu")
+        agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout,
+                               args.num_blocks,
+                               args.topk,
+                               args.use_inactive, args.blocked_grad).to(device)
+
+        optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+
+        print(f'new model ... {run_name}')
+        update_init = 1
+        global_step = 0
+        args.run_name = run_name
+        max_rewards = 0.0
+
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
