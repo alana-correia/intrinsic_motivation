@@ -271,12 +271,13 @@ if __name__ == "__main__":
         f = open(os.path.join(checkpoint_path, f"{args.run_name}_args.json"), "r")
         args = json.loads(f.read())
 
-        print(args)
-
-        exit()
         args = function_with_args_and_default_kwargs(**args)
         args.run_name = run_name
         args.device_num = device_num
+
+        print(args.run_name)
+        print(args.device_num)
+        exit()
         device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
         agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks,
                                args.topk,
