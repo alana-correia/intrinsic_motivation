@@ -34,7 +34,7 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
     for idx in range(num_games):
 
         envs = gym.vector.SyncVectorEnv(
-            [make_env_curiosity(args.gym_id, args.seed, args.frame_stack, args.full_space_actions, mode=args.mode) for idx in
+            [make_env_curiosity(args.gym_id, args.seed, args.frame_stack, args.full_space_actions, mode=args.mode, difficulty=args.difficulty) for idx in
              range(num_envs)]
         )
 
@@ -121,6 +121,8 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
     data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
 
     return stats
+
+
 
 
 def test_II(args, agent, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device, pertub):
@@ -707,6 +709,10 @@ if __name__ == "__main__":
     if args.test_name == "testI":
         #mesmo ambiente de treinamento
         test_I(args, agent, args.run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
+    if args.test_name == "testII":
+            # mesmo ambiente de treinamento
+        test_I(args, agent, args.run_name, path_load, os.path.join(path_save, "test_II"), "test_II", num_games,
+                   num_envs, type_model, device)
     ''' 
     elif args.test_name == "testII":
         #pequenas mudanças de dinamica do ambiente - mudança de nível do jogo

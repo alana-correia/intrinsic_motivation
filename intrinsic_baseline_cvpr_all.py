@@ -39,6 +39,7 @@ def parse_args():
                         help="the id of the gym environment")
     parser.add_argument("--num-actions", type=int, default=18)
     parser.add_argument("--mode", type=int, default=0)
+    parser.add_argument("--difficulty", type=int, default=0)
     parser.add_argument("--full-space-actions", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True)
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
