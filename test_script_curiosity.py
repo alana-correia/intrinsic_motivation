@@ -34,9 +34,11 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
     for idx in range(num_games):
 
         envs = gym.vector.SyncVectorEnv(
-            [make_env_curiosity(args.gym_id, args.seed + idx, idx, args.frame_stack, False, run_name, split='test') for i in
+            [make_env_curiosity(args.gym_id, args.seed + idx, idx, args.frame_stack, args.full_space_actions) for idx in
              range(num_envs)]
         )
+
+
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
         checkpoint = torch.load(os.path.join(path_load, f"{run_name}_{type_model}.pth"))
