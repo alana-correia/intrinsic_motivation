@@ -33,6 +33,8 @@ def parse_args():
                         help="experiment name")
     parser.add_argument("--gym-id", type=str, default="Asteroids-v4",
         help="the id of the gym environment")
+    parser.add_argument("--test-name", type=str, default="testI",
+                        help="the id of the gym environment")
     parser.add_argument("--num-actions", type=int, default=18)
     parser.add_argument("--mode", type=int, default=0)
     parser.add_argument("--full-space-actions", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True)

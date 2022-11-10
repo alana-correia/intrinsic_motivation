@@ -15,6 +15,7 @@ import sys
 
 from intrinsic_baseline_cvpr_all import AgentCuriosity
 from intrinsic_baseline_cvpr_all import make_env as make_env_curiosity
+from intrinsic_baseline_cvpr_all import parse_args as parse_args_curiosity
 
 
 import os
@@ -655,12 +656,12 @@ def function_with_args_and_default_kwargs(unk, **kwargs):
     return args, test_name
 
 if __name__ == "__main__":
-    #args = parse_args()
-    run_name = "MsPacman-v4__my_baseline_intrinsic__1__1664396744"
-    checkpoint_path = os.path.join("checkpoints", f"{run_name}_args.json")
+    args = parse_args_curiosity()
+    #run_name = "MsPacman-v4__my_baseline_intrinsic__1__1664396744"
+    checkpoint_path = os.path.join("checkpoints", f"{args.run_name}_args.json")
     print(checkpoint_path)
     path_load = "checkpoints/"
-    path_save = f'checkpoints/videos_and_results/{run_name}'
+    path_save = f'checkpoints/videos_and_results/{args.run_name}'
     type_model = "model"
 
     if not os.path.exists(path_save):
@@ -673,10 +674,10 @@ if __name__ == "__main__":
     #kwargs = json.loads(f.read())
 
     #kwargs = json.loads(checkpoint_path)
-    with open(checkpoint_path, "r") as read_file:
-        data = json.load(read_file)
+    #with open(checkpoint_path, "r") as read_file:
+    #    data = json.load(read_file)
 
-    args, test_name = function_with_args_and_default_kwargs(sys.argv, **kwargs)
+    #args, test_name = function_with_args_and_default_kwargs(sys.argv, **kwargs)
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -692,31 +693,31 @@ if __name__ == "__main__":
                            args.topk,
                            args.use_inactive, args.blocked_grad).to(device)
 
-    if test_name == "test_I":
-        test_I(args, agent, run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
-    elif test_name == "test_II":
+    if args.test_name == "testI":
+        test_I(args, agent, args.run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
+    elif args.test_name == "testII":
     # cenário de teste II - ambiente de teste do agente com estilo diferente
-        test_II(args, agent, run_name, path_load, os.path.join(path_save, "test_II_v1"), "test_II_v1", num_games, num_envs, type_model,
+        test_II(args, agent, args.run_name, path_load, os.path.join(path_save, "test_II_v1"), "test_II_v1", num_games, num_envs, type_model,
                      device, 10.0)
-    elif test_name == "test_III":
+    elif args.test_name == "testIII":
     # cenário de teste III - ambiente de teste do agente mais difícil
-        test_III(args, agent, run_name, path_load, os.path.join(path_save, "test_III"), "test_III", 4, num_games,
+        test_III(args, agent, args.run_name, path_load, os.path.join(path_save, "test_III"), "test_III", 4, num_games,
                        num_envs, type_model,
                        device)
-    elif test_name == "test_IV":
+    elif args.test_name == "testIV":
     # cenário de teste IV - ambiente de teste do agente mais difícil
-        test_IV(args, agent, run_name, path_load, os.path.join(path_save, "test_IV"), "test_IV", 4, 1,
+        test_IV(args, agent, args.run_name, path_load, os.path.join(path_save, "test_IV"), "test_IV", 4, 1,
                          num_games,
                          num_envs, type_model,
                          device)
-    elif test_name == "test_V":
+    elif args.test_name == "testV":
     # cenário de teste V - ambiente de teste do agente pulando frames - 10 frames
-        test_V(args, agent, run_name, path_load, os.path.join(path_save, "test_V"), "test_V", 10 , num_games,
+        test_V(args, agent, args.run_name, path_load, os.path.join(path_save, "test_V"), "test_V", 10 , num_games,
                        num_envs, type_model,
                        device)
     else:
     # cenário de teste V - ambiente de teste do agente com oclusões não vistas
-        test_VI(args, agent, run_name, path_load, os.path.join(path_save, "test_VI"), "test_VI", 2, num_games,
+        test_VI(args, agent, args.run_name, path_load, os.path.join(path_save, "test_VI"), "test_VI", 2, num_games,
                        num_envs, type_model,
                        device)
 
