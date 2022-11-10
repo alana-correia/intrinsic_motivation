@@ -669,6 +669,8 @@ if __name__ == "__main__":
     path_save = f'checkpoints/videos_and_results/{args.run_name}'
     type_model = args.type_model
 
+
+
     if not os.path.exists(path_save):
         os.makedirs(path_save)
 
@@ -688,8 +690,9 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-
+    #device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(f"cuda:{args.device_num}" if torch.cuda.is_available() and args.cuda else "cpu")
+    torch.cuda.set_device(args.device_num)
     #agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
     #           args.use_inactive, args.blocked_grad).to(device)
 
@@ -699,11 +702,14 @@ if __name__ == "__main__":
                            args.use_inactive, args.blocked_grad).to(device)
 
     if args.test_name == "testI":
+        #mesmo ambiente de treinamento
         test_I(args, agent, args.mode, args.run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
+    ''' 
     elif args.test_name == "testII":
-    # cenário de teste II - ambiente de teste do agente com estilo diferente
-        test_II(args, agent, args.run_name, path_load, os.path.join(path_save, "test_II_v1"), "test_II_v1", num_games, num_envs, type_model,
-                     device, 10.0)
+        #pequenas mudanças de dinamica do ambiente - mudança de nível do jogo
+        #change_(args, agent, args.run_name, path_load, os.path.join(path_save, "test_II_v1"), "test_II_v1", num_games, num_envs, type_model,
+        #             device, 5.0)
+        #change_difficulty(args, agent, args.mode, args.run_name, path_load, os.path.join(path_save, "test_III"), "test_III", 4, num_games, num_envs, type_model, device)
     elif args.test_name == "testIII":
     # cenário de teste III - ambiente de teste do agente mais difícil
         test_III(args, agent, args.run_name, path_load, os.path.join(path_save, "test_III"), "test_III", 4, num_games,
@@ -724,7 +730,7 @@ if __name__ == "__main__":
     # cenário de teste V - ambiente de teste do agente com oclusões não vistas
         test_VI(args, agent, args.run_name, path_load, os.path.join(path_save, "test_VI"), "test_VI", 2, num_games,
                        num_envs, type_model,
-                       device)
+                       device)'''
 
 
 
