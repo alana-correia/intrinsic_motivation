@@ -21,7 +21,7 @@ from intrinsic_baseline_cvpr_all import parse_args as parse_args_curiosity
 import os
 #import moviepy.video.io.ImageSequenceClip
 
-def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device):
+def test_I(args, agent, mode, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device):
     scores = []
     lives = []
     lenght = []
@@ -34,7 +34,7 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
     for idx in range(num_games):
 
         envs = gym.vector.SyncVectorEnv(
-            [make_env_curiosity(args.gym_id, args.seed, args.frame_stack, args.full_space_actions) for idx in
+            [make_env_curiosity(args.gym_id, args.seed, args.frame_stack, args.full_space_actions, mode=args.mode) for idx in
              range(num_envs)]
         )
 
@@ -699,7 +699,7 @@ if __name__ == "__main__":
                            args.use_inactive, args.blocked_grad).to(device)
 
     if args.test_name == "testI":
-        test_I(args, agent, args.run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
+        test_I(args, agent, args.mode, args.run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
     elif args.test_name == "testII":
     # cenário de teste II - ambiente de teste do agente com estilo diferente
         test_II(args, agent, args.run_name, path_load, os.path.join(path_save, "test_II_v1"), "test_II_v1", num_games, num_envs, type_model,
