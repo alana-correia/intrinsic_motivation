@@ -72,12 +72,12 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
                 done = done[-1]
                 r += reward[-1]
 
-                total_reward = args.em_weight * reward[-1] + args.im_weight * im_reward.data.cpu().numpy()[-1]
+                #total_reward = args.em_weight * reward[-1] + args.im_weight * im_reward.data.cpu().numpy()[-1]
                 print('\rgame {} - reward (sum) {} - done {} - action {}'.format(idx, r, done, action.cpu().numpy()), end='')
                 next_obs = torch.Tensor(next_obs).to(device)
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0 or idx == 1:
+                if idx == 0:
                     path_img = os.path.join(path_save,f'imgs_video_{idx}')
                     if not os.path.exists(path_img):
                         os.makedirs(path_img)
@@ -85,7 +85,7 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
                     k += 1
 
         envs.close()
-        if idx == 0 or idx == 1:
+        if idx == 0:
             fps = 10
             print('\nstart video ...')
             path_video = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}/{test_name}/imgs_video_{idx}/*.png'
@@ -663,16 +663,16 @@ def function_with_args_and_default_kwargs(unk, **kwargs):
 if __name__ == "__main__":
     #args = parse_args()
     run_name = "BreakoutNoFrameskip-v4__cnn_brims_mlp_mlp_hibrid_reward__1__1658017900"
-    checkpoint_path = os.path.join("/home/brain/alana/checkpoints/intrinsic_results", f"{run_name}_args.json")
+    checkpoint_path = os.path.join("/home/brain/alana/checkpoints", f"{run_name}_args.json")
     print(checkpoint_path)
-    path_load = "/home/brain/alana/checkpoints/intrinsic_results"
+    path_load = "/home/brain/alana/checkpoints/"
     path_save = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}'
     type_model = "best_model"
 
     if not os.path.exists(path_save):
         os.makedirs(path_save)
 
-    num_games = 8
+    num_games = 10
     num_envs = 1
 
     f = open(checkpoint_path, "r")
