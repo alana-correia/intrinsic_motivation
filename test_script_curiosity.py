@@ -667,7 +667,7 @@ if __name__ == "__main__":
     print(checkpoint_path)
     path_load = "checkpoints/"
     path_save = f'checkpoints/videos_and_results/{args.run_name}'
-    type_model = "model"
+    type_model = args.type_model
 
     if not os.path.exists(path_save):
         os.makedirs(path_save)
