@@ -672,7 +672,7 @@ if __name__ == "__main__":
     #f = open(checkpoint_path, "r")
     #kwargs = json.loads(f.read())
 
-    kwargs = json.load(checkpoint_path)
+    kwargs = json.loads(checkpoint_path)
 
     args, test_name = function_with_args_and_default_kwargs(sys.argv, **kwargs)
     # TRY NOT TO MODIFY: seeding
