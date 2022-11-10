@@ -38,7 +38,7 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
              range(num_envs)]
         )
 
-    
+
 
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
@@ -77,21 +77,21 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
                 next_obs = torch.Tensor(next_obs).to(device)
                 obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
 
-                if idx == 0:
-                    path_img = os.path.join(path_save,f'imgs_video_{idx}')
-                    if not os.path.exists(path_img):
-                        os.makedirs(path_img)
-                    matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
-                    k += 1
+                #if idx == 0:
+                #    path_img = os.path.join(path_save,f'imgs_video_{idx}')
+                #    if not os.path.exists(path_img):
+                #        os.makedirs(path_img)
+                #    matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
+                #    k += 1
 
         envs.close()
-        if idx == 0:
-            fps = 10
-            print('\nstart video ...')
-            path_video = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}/{test_name}/imgs_video_{idx}/*.png'
-            image_files = sorted(glob.glob(path_video), key=lambda x: int(os.path.basename(x).split('/')[-1].split('.')[0]))
-            clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(image_files, fps=fps)
-            clip.write_videofile(os.path.join(path_save, f"{test_name}_{run_name}_game{idx}.mp4"))
+        #if idx == 0:
+        #    fps = 10
+        #    print('\nstart video ...')
+        #    path_video = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}/{test_name}/imgs_video_{idx}/*.png'
+        #    image_files = sorted(glob.glob(path_video), key=lambda x: int(os.path.basename(x).split('/')[-1].split('.')[0]))
+        #    clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(image_files, fps=fps)
+        #    clip.write_videofile(os.path.join(path_save, f"{test_name}_{run_name}_game{idx}.mp4"))
 
         scores.append(info[-1]['episode']['r'])
         #scores.append(r)
