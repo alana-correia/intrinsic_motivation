@@ -96,12 +96,12 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
         scores.append(info[-1]['episode']['r'])
         #scores.append(r)
         rewards.append(r)
-        lives.append(info[-1]['lives'])
+        #lives.append(info[-1]['lives'])
         lenght.append(info[-1]['episode']['l'])
         times.append(info[-1]['episode']['t'])
 
-    stats = [np.mean(scores), np.std(scores), np.mean(rewards), np.std(rewards), np.mean(lives), np.mean(lenght), np.mean(times)]
-    columns = ["scores_mean", "scores_std", "rewards_mean", "rewards_std", "lives", "lenght", "times"]
+    stats = [np.mean(scores), np.std(scores), np.mean(rewards), np.std(rewards), np.mean(lenght), np.mean(times)]
+    columns = ["scores_mean", "scores_std", "rewards_mean", "rewards_std", "lenght", "times"]
     df_stats = pd.DataFrame([stats], columns=columns)
 
     data_dict = {'scores': pd.Series(scores),
