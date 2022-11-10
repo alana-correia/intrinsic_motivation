@@ -656,7 +656,7 @@ def function_with_args_and_default_kwargs(unk, **kwargs):
 
 if __name__ == "__main__":
     #args = parse_args()
-    run_name = "BreakoutNoFrameskip-v4__cnn_brims_mlp_mlp_hibrid_reward__1__1658017900"
+    run_name = "MsPacman-v4__my_baseline_intrinsic__1__1664396744"
     checkpoint_path = os.path.join("checkpoints", f"{run_name}_args.json")
     print(checkpoint_path)
     path_load = "checkpoints/"
@@ -669,8 +669,10 @@ if __name__ == "__main__":
     num_games = 10
     num_envs = 1
 
-    f = open(checkpoint_path, "r")
-    kwargs = json.loads(f.read())
+    #f = open(checkpoint_path, "r")
+    #kwargs = json.loads(f.read())
+
+    kwargs = json.load(checkpoint_path)
 
     args, test_name = function_with_args_and_default_kwargs(sys.argv, **kwargs)
     # TRY NOT TO MODIFY: seeding
