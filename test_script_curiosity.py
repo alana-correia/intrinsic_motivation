@@ -10,18 +10,12 @@ import numpy as np
 import pandas as pd
 import torch
 import json
-import wandb
 import glob
 import sys
-import torch.nn as nn
-import torch.optim as optim
-from torch.distributions.categorical import Categorical
-from torch.utils.tensorboard import SummaryWriter
-import matplotlib.pyplot as plt
-from ppo_atari_brims_curiosity import AgentCuriosity
-from ppo_atari_brims_curiosity import make_env as make_env_curiosity
-from collections import defaultdict
-from scipy.stats import norm
+
+from intrinsic_baseline_cvpr_all import AgentCuriosity
+from intrinsic_baseline_cvpr_all import make_env as make_env_curiosity
+
 
 import os
 import moviepy.video.io.ImageSequenceClip
