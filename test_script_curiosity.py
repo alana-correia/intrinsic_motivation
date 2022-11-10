@@ -18,7 +18,7 @@ from intrinsic_baseline_cvpr_all import make_env as make_env_curiosity
 
 
 import os
-import moviepy.video.io.ImageSequenceClip
+#import moviepy.video.io.ImageSequenceClip
 
 def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device):
     scores = []
