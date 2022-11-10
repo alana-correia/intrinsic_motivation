@@ -45,6 +45,7 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
         agent.load_state_dict(checkpoint['model_state_dict'])
         agent.eval()
         done = False
+        print(envs.reset())
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
