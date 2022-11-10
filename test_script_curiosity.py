@@ -21,7 +21,7 @@ from intrinsic_baseline_cvpr_all import parse_args as parse_args_curiosity
 import os
 #import moviepy.video.io.ImageSequenceClip
 
-def test_I(args, agent, mode, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device):
+def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device):
     scores = []
     lives = []
     lenght = []
@@ -43,7 +43,7 @@ def test_I(args, agent, mode, run_name, path_load, path_save, test_name, num_gam
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
         checkpoint = torch.load(os.path.join(path_load, f"{run_name}_{type_model}.pth"))
-        agent.load_state_dict(checkpoint['model_state_dict'])
+        agent.load_state_dict(checkpoint['model_state_dict'], map_location = torch.device(device))
         print('Loading Agent ...')
         agent.eval()
         done = False
@@ -693,6 +693,8 @@ if __name__ == "__main__":
     #device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     device = torch.device(f"cuda:{args.device_num}" if torch.cuda.is_available() and args.cuda else "cpu")
     torch.cuda.set_device(args.device_num)
+
+
     #agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
     #           args.use_inactive, args.blocked_grad).to(device)
 
@@ -703,7 +705,7 @@ if __name__ == "__main__":
 
     if args.test_name == "testI":
         #mesmo ambiente de treinamento
-        test_I(args, agent, args.mode, args.run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
+        test_I(args, agent, args.run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
     ''' 
     elif args.test_name == "testII":
         #pequenas mudanças de dinamica do ambiente - mudança de nível do jogo
