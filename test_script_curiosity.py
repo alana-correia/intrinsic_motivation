@@ -46,7 +46,7 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
         print('Loading Agent ...')
         agent.eval()
         done = False
-        print(envs.reset().shape())
+        print(type(envs.reset()))
         next_obs = torch.Tensor(envs.reset()).to(device)
         next_done = torch.zeros(num_envs).to(device)
 
