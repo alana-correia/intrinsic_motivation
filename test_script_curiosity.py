@@ -680,8 +680,13 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
-               args.use_inactive, args.blocked_grad).to(device)
+    #agent = AgentCuriosity(args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout, args.num_blocks, args.topk,
+    #           args.use_inactive, args.blocked_grad).to(device)
+
+    agent = AgentCuriosity(args.num_actions, args.frame_stack, args.ninp, args.nhid, args.nlayers, args.dropout,
+                           args.num_blocks,
+                           args.topk,
+                           args.use_inactive, args.blocked_grad).to(device)
 
     if test_name == "test_I":
         test_I(args, agent, run_name, path_load, os.path.join(path_save, "test_I"), "test_I" , num_games, num_envs, type_model, device)
