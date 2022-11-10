@@ -123,6 +123,217 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
     return stats
 
 
+def oclusions(args, agent, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device, wd):
+    scores = []
+    lives = []
+    lenght = []
+    times = []
+    rewards = []
+
+    if not os.path.exists(path_save):
+        os.makedirs(path_save)
+
+    for idx in range(num_games):
+
+        envs = gym.vector.SyncVectorEnv(
+            [make_env_curiosity(args.gym_id, args.seed, args.frame_stack, args.full_space_actions, mode=args.mode, difficulty=args.difficulty) for idx in
+             range(num_envs)]
+        )
+
+
+
+        assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
+
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_{type_model}.pth"), map_location = "cpu")
+        agent.load_state_dict(checkpoint['model_state_dict'])
+        agent = agent.to(device)
+        print('Loading Agent ...')
+        agent.eval()
+        done = False
+        print(type(envs.reset()))
+        next_obs = torch.Tensor(envs.reset()).to(device)
+        next_done = torch.zeros(num_envs).to(device)
+
+        next_lstm_state_p = agent.init_hidden_p(1)
+        next_lstm_state_f = agent.init_hidden_f(1)
+
+        exp_hidden = torch.zeros((1, 128)).to(device)
+
+        r = 0
+        k = 0
+
+        while not done:
+            with torch.no_grad():
+                action, logprob, _, value, next_lstm_state_p, embs_t, actual_hidden = agent.get_action_and_value(
+                    next_obs, next_lstm_state_p)
+                # hidden = repackage_hidden(hidden)
+
+                im_reward, next_lstm_state_f, exp_hidden = agent.compute_intrinsic_reward(embs_t, actual_hidden,
+                                                                                          exp_hidden, next_lstm_state_f)
+
+                next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                done = done[-1]
+                r += reward[-1]
+
+                cx = random.randint(wd + 1, 84 - wd)
+                cy = random.randint(wd + 1, 84 - wd)
+                next_obs[:, :, cx:cx + wd, cy:cy + wd] = 255
+                next_obs[:, :, cx - wd:cx, cy - wd:cy] = 255
+                next_obs[:, :, cx - wd:cx, cy:cy + wd] = 255
+                next_obs[:, :, cx:cx + wd:, cy - wd:cy] = 255
+
+                #total_reward = args.em_weight * reward[-1] + args.im_weight * im_reward.data.cpu().numpy()[-1]
+                print('\rgame {} - reward (sum) {} - done {} - action {}'.format(idx, r, done, action.cpu().numpy()), end='')
+                next_obs = torch.Tensor(next_obs).to(device)
+                obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
+
+                #if idx == 0:
+                #    path_img = os.path.join(path_save,f'imgs_video_{idx}')
+                #    if not os.path.exists(path_img):
+                #        os.makedirs(path_img)
+                #    matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
+                #    k += 1
+
+        envs.close()
+        #if idx == 0:
+        #    fps = 10
+        #    print('\nstart video ...')
+        #    path_video = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}/{test_name}/imgs_video_{idx}/*.png'
+        #    image_files = sorted(glob.glob(path_video), key=lambda x: int(os.path.basename(x).split('/')[-1].split('.')[0]))
+        #    clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(image_files, fps=fps)
+        #    clip.write_videofile(os.path.join(path_save, f"{test_name}_{run_name}_game{idx}.mp4"))
+
+        scores.append(info[-1]['episode']['r'])
+        #scores.append(r)
+        rewards.append(r)
+        #lives.append(info[-1]['lives'])
+        lenght.append(info[-1]['episode']['l'])
+        times.append(info[-1]['episode']['t'])
+
+    stats = [np.mean(scores), np.std(scores), np.mean(rewards), np.std(rewards), np.mean(lenght), np.mean(times)]
+    columns = ["scores_mean", "scores_std", "rewards_mean", "rewards_std", "lenght", "times"]
+    df_stats = pd.DataFrame([stats], columns=columns)
+
+    data_dict = {'scores': pd.Series(scores),
+                 'rewards': pd.Series(rewards),
+                 'lives': pd.Series(lives),
+                 'lenght': pd.Series(lenght),
+                 'times': pd.Series(times)}
+
+    data_df = pd.DataFrame(data_dict)
+    print(f'{test_name} stats:')
+    print(df_stats)
+    print(f'{test_name} results:')
+    print(data_df)
+
+    df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
+    data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
+
+    return stats
+
+def drop_frames(args, agent, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device):
+    scores = []
+    lives = []
+    lenght = []
+    times = []
+    rewards = []
+
+    if not os.path.exists(path_save):
+        os.makedirs(path_save)
+
+    for idx in range(num_games):
+
+        envs = gym.vector.SyncVectorEnv(
+            [make_env_curiosity(args.gym_id, args.seed, args.frame_stack, args.full_space_actions, mode=args.mode, difficulty=args.difficulty, skip=8) for idx in
+             range(num_envs)]
+        )
+
+
+
+        assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
+
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_{type_model}.pth"), map_location = "cpu")
+        agent.load_state_dict(checkpoint['model_state_dict'])
+        agent = agent.to(device)
+        print('Loading Agent ...')
+        agent.eval()
+        done = False
+        print(type(envs.reset()))
+        next_obs = torch.Tensor(envs.reset()).to(device)
+        next_done = torch.zeros(num_envs).to(device)
+
+        next_lstm_state_p = agent.init_hidden_p(1)
+        next_lstm_state_f = agent.init_hidden_f(1)
+
+        exp_hidden = torch.zeros((1, 128)).to(device)
+
+        r = 0
+        k = 0
+
+        while not done:
+            with torch.no_grad():
+                action, logprob, _, value, next_lstm_state_p, embs_t, actual_hidden = agent.get_action_and_value(
+                    next_obs, next_lstm_state_p)
+                # hidden = repackage_hidden(hidden)
+
+                im_reward, next_lstm_state_f, exp_hidden = agent.compute_intrinsic_reward(embs_t, actual_hidden,
+                                                                                          exp_hidden, next_lstm_state_f)
+
+                next_obs, reward, done, info = envs.step(action.cpu().numpy())
+                done = done[-1]
+                r += reward[-1]
+
+                #total_reward = args.em_weight * reward[-1] + args.im_weight * im_reward.data.cpu().numpy()[-1]
+                print('\rgame {} - reward (sum) {} - done {} - action {}'.format(idx, r, done, action.cpu().numpy()), end='')
+                next_obs = torch.Tensor(next_obs).to(device)
+                obs_np = next_obs[0, 3, :, :].data.cpu().numpy()
+
+                #if idx == 0:
+                #    path_img = os.path.join(path_save,f'imgs_video_{idx}')
+                #    if not os.path.exists(path_img):
+                #        os.makedirs(path_img)
+                #    matplotlib.image.imsave(os.path.join(path_img, f'{k}.png'), obs_np, cmap='gray')
+                #    k += 1
+
+        envs.close()
+        #if idx == 0:
+        #    fps = 10
+        #    print('\nstart video ...')
+        #    path_video = f'/home/brain/alana/checkpoints/videos_and_results/{run_name}/{test_name}/imgs_video_{idx}/*.png'
+        #    image_files = sorted(glob.glob(path_video), key=lambda x: int(os.path.basename(x).split('/')[-1].split('.')[0]))
+        #    clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(image_files, fps=fps)
+        #    clip.write_videofile(os.path.join(path_save, f"{test_name}_{run_name}_game{idx}.mp4"))
+
+        scores.append(info[-1]['episode']['r'])
+        #scores.append(r)
+        rewards.append(r)
+        #lives.append(info[-1]['lives'])
+        lenght.append(info[-1]['episode']['l'])
+        times.append(info[-1]['episode']['t'])
+
+    stats = [np.mean(scores), np.std(scores), np.mean(rewards), np.std(rewards), np.mean(lenght), np.mean(times)]
+    columns = ["scores_mean", "scores_std", "rewards_mean", "rewards_std", "lenght", "times"]
+    df_stats = pd.DataFrame([stats], columns=columns)
+
+    data_dict = {'scores': pd.Series(scores),
+                 'rewards': pd.Series(rewards),
+                 'lives': pd.Series(lives),
+                 'lenght': pd.Series(lenght),
+                 'times': pd.Series(times)}
+
+    data_df = pd.DataFrame(data_dict)
+    print(f'{test_name} stats:')
+    print(df_stats)
+    print(f'{test_name} results:')
+    print(data_df)
+
+    df_stats.to_csv(os.path.join(path_save, f'{test_name}_stats.csv'), index=False)
+    data_df.to_csv(os.path.join(path_save, f'{test_name}_results.csv'), index=False)
+
+    return stats
+
+
+
 
 
 def test_II(args, agent, run_name, path_load, path_save, test_name, num_games, num_envs, type_model, device, pertub):
@@ -713,6 +924,15 @@ if __name__ == "__main__":
             # mesmo ambiente de treinamento
         test_I(args, agent, args.run_name, path_load, os.path.join(path_save, "test_II"), "test_II", num_games,
                    num_envs, type_model, device)
+    if args.test_name == "oclusions":
+        oclusions(args, agent, args.run_name, path_load, os.path.join(path_save, "oclusions"), "oclusions", 2, num_games,
+                num_envs, type_model,
+                device, 2)
+    if args.test_name == "drop_frames":
+        drop_frames(args, agent, args.run_name, path_load, os.path.join(path_save, "drop_frames"), "drop_frames", 2, num_games,
+                num_envs, type_model,
+                device, 2)
+
     ''' 
     elif args.test_name == "testII":
         #pequenas mudanças de dinamica do ambiente - mudança de nível do jogo
