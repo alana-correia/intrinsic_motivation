@@ -42,8 +42,9 @@ def test_I(args, agent, run_name, path_load, path_save, test_name, num_games, nu
 
         assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_{type_model}.pth"))
-        agent.load_state_dict(checkpoint['model_state_dict'], map_location = torch.device(device))
+        checkpoint = torch.load(os.path.join(path_load, f"{run_name}_{type_model}.pth"), map_location = "cpu")
+        agent.load_state_dict(checkpoint['model_state_dict'])
+        agent = agent.to(device)
         print('Loading Agent ...')
         agent.eval()
         done = False
